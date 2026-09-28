@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Video Browser</string>
+    <string name="search_hint">Search or enter address</string>
+    <string name="detected_media">Detected Media Resources</string>
+    <string name="downloads_manager">Downloads Manager</string>
+    <string name="browser_tabs">Browser Tabs</string>
+    <string name="new_tab">New Tab</string>
+    <string name="confirm_download">Confirm Video Download</string>
+    <string name="start_download">Start Download</string>
+    <string name="cancel">Cancel</string>
+    <string name="open">Open</string>
+    <string name="retry">Retry</string>
+</resources>

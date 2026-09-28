@@ -1,0 +1,6 @@
+{
+  "name": "Video Browser",
+  "description": "Android browser with real-time video stream detection, playback inspection, and download manager.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
