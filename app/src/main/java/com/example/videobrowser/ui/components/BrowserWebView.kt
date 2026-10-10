@@ -33,12 +33,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -48,8 +51,13 @@ import com.example.videobrowser.adblock.AdBlockerEngine
 import com.example.videobrowser.detection.MediaBridge
 import com.example.videobrowser.detection.WebMediaInjector
 import com.example.videobrowser.detection.WebViewCacheManager
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.NavigationTransitionType
+import com.example.videobrowser.ui.motion.pageMotionLayer
+import com.example.videobrowser.ui.motion.rememberPageMotionState
 import com.example.videobrowser.viewmodel.BrowserViewModel
 import com.example.videobrowser.viewmodel.WebAction
+import kotlinx.coroutines.launch
 
 private const val TAG = "BrowserWebView"
 
@@ -68,42 +76,87 @@ fun BrowserWebView(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val density = LocalDensity.current
+    val isReducedMotion = LocalReducedMotion.current
+    val pageMotionState = rememberPageMotionState()
+    val coroutineScope = rememberCoroutineScope()
+    var lastActionTime by remember { mutableLongStateOf(0L) }
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webViewCreationError by remember { mutableStateOf<String?>(null) }
     var rendererCrashCount by remember { mutableIntStateOf(0) }
     val initialUrl = remember { targetUrl }
 
-    // Sync external targetUrl changes with WebView
+    // Sync external targetUrl changes with WebView with smooth subtle transform
     LaunchedEffect(targetUrl) {
         if (targetUrl.isNotBlank() && webViewInstance?.url != targetUrl) {
             try {
+                lastActionTime = System.currentTimeMillis()
+                launch {
+                    pageMotionState.animateNavigation(
+                        type = NavigationTransitionType.NEW_PAGE,
+                        density = density,
+                        isReducedMotion = isReducedMotion
+                    )
+                }
                 webViewInstance?.loadUrl(targetUrl)
             } catch (_: Exception) {}
         }
     }
 
     // Listen to WebAction commands from ViewModel (loadUrl, goBack, goForward, reload, stop)
-    LaunchedEffect(viewModel) {
+    LaunchedEffect(viewModel, isReducedMotion, density) {
         viewModel.webActions.collect { action ->
             try {
                 when (action) {
                     is WebAction.LoadUrl -> {
+                        lastActionTime = System.currentTimeMillis()
+                        launch {
+                            pageMotionState.animateNavigation(
+                                type = NavigationTransitionType.NEW_PAGE,
+                                density = density,
+                                isReducedMotion = isReducedMotion
+                            )
+                        }
                         if (webViewInstance?.url != action.url) {
                             webViewInstance?.loadUrl(action.url)
                         }
                     }
                     is WebAction.GoBack -> {
+                        lastActionTime = System.currentTimeMillis()
+                        launch {
+                            pageMotionState.animateNavigation(
+                                type = NavigationTransitionType.BACK,
+                                density = density,
+                                isReducedMotion = isReducedMotion
+                            )
+                        }
                         if (webViewInstance?.canGoBack() == true) {
                             webViewInstance?.goBack()
                         }
                     }
                     is WebAction.GoForward -> {
+                        lastActionTime = System.currentTimeMillis()
+                        launch {
+                            pageMotionState.animateNavigation(
+                                type = NavigationTransitionType.FORWARD,
+                                density = density,
+                                isReducedMotion = isReducedMotion
+                            )
+                        }
                         if (webViewInstance?.canGoForward() == true) {
                             webViewInstance?.goForward()
                         }
                     }
                     is WebAction.Reload -> {
+                        lastActionTime = System.currentTimeMillis()
+                        launch {
+                            pageMotionState.animateNavigation(
+                                type = NavigationTransitionType.RELOAD,
+                                density = density,
+                                isReducedMotion = isReducedMotion
+                            )
+                        }
                         webViewInstance?.reload()
                     }
                     is WebAction.StopLoading -> {
@@ -170,7 +223,7 @@ fun BrowserWebView(
     } else {
         key(rendererCrashCount) {
             AndroidView(
-                modifier = modifier,
+                modifier = modifier.pageMotionLayer(pageMotionState),
                 factory = { ctx ->
                     try {
                         WebViewCacheManager.sanitizeWebViewCache(ctx)
@@ -185,6 +238,17 @@ fun BrowserWebView(
                                     rendererCrashCount++
                                 } else {
                                     webViewCreationError = "Web rendering engine stopped unexpectedly. Tap below to reload."
+                                }
+                            },
+                            onPageStartedAnimation = {
+                                if (System.currentTimeMillis() - lastActionTime > 350L) {
+                                    coroutineScope.launch {
+                                        pageMotionState.animateNavigation(
+                                            type = NavigationTransitionType.NEW_PAGE,
+                                            density = density,
+                                            isReducedMotion = isReducedMotion
+                                        )
+                                    }
                                 }
                             },
                             onFullscreenStateChange = onFullscreenStateChange
@@ -224,6 +288,7 @@ private fun createConfiguredWebView(
     currentUrl: String,
     fallbackSoftwareLayer: Boolean,
     onRenderProcessExited: () -> Unit,
+    onPageStartedAnimation: () -> Unit = {},
     onFullscreenStateChange: (Boolean, View?, (() -> Unit)?) -> Unit
 ): WebView {
     WebViewCacheManager.configureGraphicsEnvironment()
@@ -327,6 +392,7 @@ private fun createConfiguredWebView(
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                onPageStartedAnimation()
                 viewModel.onPageStarted(url)
                 viewModel.onNavigationStateChanged(view.canGoBack(), view.canGoForward())
 

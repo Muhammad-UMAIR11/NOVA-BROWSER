@@ -3,9 +3,12 @@ package com.example.videobrowser.ui.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -19,6 +22,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,6 +64,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.MotionTransitions
+import com.example.videobrowser.ui.motion.motionTween
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -92,27 +102,70 @@ fun BrowserTopBar(
 ) {
     val focusManager = LocalFocusManager.current
     var isFocused by remember { mutableStateOf(false) }
+    val isReducedMotion = LocalReducedMotion.current
 
-    // Smooth URL container background & border animations
+    // Smooth URL container background & border animations with focus & loading feedback
     val containerBgColor by animateColorAsState(
         targetValue = if (isFocused) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
         },
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.Standard, isReducedMotion = isReducedMotion),
         label = "containerBgColor"
     )
 
     val containerBorderColor by animateColorAsState(
         targetValue = if (isFocused) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+        } else if (isLoading) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
         } else {
             Color.Transparent
         },
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.Standard, isReducedMotion = isReducedMotion),
         label = "containerBorderColor"
     )
+
+    // Subtle scale and border width transitions on focus / blur
+    val barScale by animateFloatAsState(
+        targetValue = if (isFocused && !isReducedMotion) 1.01f else 1.0f,
+        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion),
+        label = "barScale"
+    )
+
+    val barBorderWidth by animateDpAsState(
+        targetValue = if (isFocused) 1.5.dp else 1.dp,
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+        label = "barBorderWidth"
+    )
+
+    // Smooth URL change opacity settle effect
+    val urlTextAlpha = remember { Animatable(1.0f) }
+    LaunchedEffect(urlInput) {
+        if (!isFocused && !isReducedMotion && urlInput.isNotBlank()) {
+            urlTextAlpha.snapTo(0.75f)
+            urlTextAlpha.animateTo(
+                targetValue = 1.0f,
+                animationSpec = tween(durationMillis = MotionDurations.Fast, easing = MotionEasing.Standard)
+            )
+        } else {
+            urlTextAlpha.snapTo(1.0f)
+        }
+    }
+
+    // Clear icon micro-animation
+    var isClearing by remember { mutableStateOf(false) }
+    val clearIconRotation by animateFloatAsState(
+        targetValue = if (isClearing) 90f else 0f,
+        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion),
+        label = "clearIconRotation"
+    )
+    LaunchedEffect(urlInput) {
+        if (urlInput.isEmpty()) {
+            isClearing = false
+        }
+    }
 
     // Smooth linear progress indicator animation
     val animatedProgress by animateFloatAsState(
@@ -137,7 +190,11 @@ fun BrowserTopBar(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp)
-                    .border(1.dp, containerBorderColor, RoundedCornerShape(24.dp)),
+                    .graphicsLayer {
+                        scaleX = barScale
+                        scaleY = barScale
+                    }
+                    .border(barBorderWidth, containerBorderColor, RoundedCornerShape(24.dp)),
                 shape = RoundedCornerShape(24.dp),
                 color = containerBgColor
             ) {
@@ -184,19 +241,39 @@ fun BrowserTopBar(
                     }
 
                     val isHttps = urlInput.startsWith("https://")
-                    val statusIcon = if (isHttps) Icons.Default.Lock else Icons.Default.Search
                     val statusTint by animateColorAsState(
-                        targetValue = if (isHttps) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = tween(200),
+                        targetValue = when {
+                            isHttps -> MaterialTheme.colorScheme.primary
+                            isFocused -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
                         label = "statusTint"
                     )
 
-                    Icon(
-                        imageVector = statusIcon,
-                        contentDescription = "Security Status",
-                        tint = statusTint,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    AnimatedContent(
+                        targetState = isHttps,
+                        transitionSpec = {
+                            if (!isReducedMotion) {
+                                (fadeIn(animationSpec = tween(MotionDurations.Fast, easing = MotionEasing.Standard)) +
+                                    scaleIn(initialScale = 0.82f, animationSpec = tween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate)))
+                                    .togetherWith(
+                                        fadeOut(animationSpec = tween(MotionDurations.Micro, easing = MotionEasing.Standard)) +
+                                            scaleOut(targetScale = 0.82f, animationSpec = tween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate))
+                                    )
+                            } else {
+                                fadeIn(animationSpec = snap()) togetherWith fadeOut(animationSpec = snap())
+                            }
+                        },
+                        label = "statusIconMorph"
+                    ) { https ->
+                        Icon(
+                            imageVector = if (https) Icons.Default.Lock else Icons.Default.Search,
+                            contentDescription = if (https) "Secure Connection" else "Search Status",
+                            tint = statusTint,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
 
                     TextField(
@@ -204,6 +281,7 @@ fun BrowserTopBar(
                         onValueChange = onUrlChange,
                         modifier = Modifier
                             .weight(1f)
+                            .graphicsLayer { alpha = urlTextAlpha.value }
                             .onFocusChanged { isFocused = it.isFocused }
                             .testTag("url_input_field"),
                         placeholder = {
@@ -238,20 +316,33 @@ fun BrowserTopBar(
                         )
                     )
 
-                    // Clear button with smooth scale & fade animation
+                    // Clear button with smooth scale & fade animation and click rotation
                     AnimatedVisibility(
                         visible = urlInput.isNotEmpty() && isFocused,
-                        enter = fadeIn(tween(160)) + scaleIn(tween(160)),
-                        exit = fadeOut(tween(140)) + scaleOut(tween(140))
+                        enter = MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast) +
+                            scaleIn(
+                                initialScale = 0.8f,
+                                animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)
+                            ),
+                        exit = MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Micro) +
+                            scaleOut(
+                                targetScale = 0.8f,
+                                animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+                            )
                     ) {
                         IconButton(
-                            onClick = { onUrlChange("") },
+                            onClick = {
+                                isClearing = true
+                                onUrlChange("")
+                            },
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
                                 contentDescription = "Clear address",
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .graphicsLayer { rotationZ = clearIconRotation },
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -268,7 +359,8 @@ fun BrowserTopBar(
                         AnimatedContent(
                             targetState = isLoading,
                             transitionSpec = {
-                                fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(180))
+                                MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast) togetherWith
+                                    MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Fast)
                             },
                             label = "refreshStopCrossfade"
                         ) { loading ->
@@ -349,8 +441,10 @@ fun BrowserTopBar(
         // Fluid Animated Loading Progress Bar
         AnimatedVisibility(
             visible = isLoading,
-            enter = fadeIn(tween(140)) + expandVertically(tween(180)),
-            exit = fadeOut(tween(300)) + shrinkVertically(tween(220))
+            enter = MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast) +
+                expandVertically(animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+            exit = MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Medium) +
+                shrinkVertically(animationSpec = motionTween(MotionDurations.Medium, isReducedMotion = isReducedMotion))
         ) {
             LinearProgressIndicator(
                 progress = { animatedProgress },

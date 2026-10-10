@@ -9,12 +9,14 @@ import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -63,10 +65,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.videobrowser.ui.components.BrowserBookmarksSheet
 import com.example.videobrowser.ui.components.BrowserBottomBar
+import com.example.videobrowser.ui.components.BrowserHistorySheet
+import com.example.videobrowser.ui.components.BrowserPrivacySheet
 import com.example.videobrowser.ui.components.BrowserSettingsSheet
 import com.example.videobrowser.ui.components.BrowserTopBar
 import com.example.videobrowser.ui.components.BrowserWebView
@@ -74,9 +80,14 @@ import com.example.videobrowser.ui.components.DetectedMediaSheet
 import com.example.videobrowser.ui.components.DownloadConfirmationDialog
 import com.example.videobrowser.ui.components.DownloadManagerSheet
 import com.example.videobrowser.ui.components.DownloadOrb
+import com.example.videobrowser.ui.components.NovaAiSheet
 import com.example.videobrowser.ui.components.NovaFrontPage
 import com.example.videobrowser.ui.components.NovaToolsSheet
 import com.example.videobrowser.ui.components.TabsSheet
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionTransitions
+import com.example.videobrowser.ui.motion.motionTween
 import com.example.videobrowser.viewmodel.BrowserViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,6 +99,7 @@ fun BrowserScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val downloadTasks by viewModel.downloadTasks.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isReducedMotion = LocalReducedMotion.current
 
     val activeTab = uiState.activeTab
     val detectedMediaList = uiState.detectedVideos
@@ -128,6 +140,23 @@ fun BrowserScreen(
 
     val isFrontPage = activeTab == null || activeTab.url == BrowserViewModel.NOVA_HOME_URL
 
+    val isAnyOverlayOpen = uiState.showDetectionSheet ||
+        uiState.showDownloadsSheet ||
+        uiState.showTabsSheet ||
+        uiState.showSettingsSheet ||
+        uiState.showToolsSheet ||
+        uiState.showAiSheet ||
+        uiState.showHistorySheet ||
+        uiState.showBookmarksSheet ||
+        uiState.showPrivacySheet ||
+        (uiState.selectedMediaForConfirmation != null)
+
+    val contentBlur by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isAnyOverlayOpen && !isReducedMotion) 16.dp else 0.dp,
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+        label = "contentBlur"
+    )
+
     // System Back Press handling - only enabled when there is navigation or active modal to dismiss
     val isBackHandlerEnabled = isFullscreen ||
         uiState.showDetectionSheet ||
@@ -135,6 +164,10 @@ fun BrowserScreen(
         uiState.showTabsSheet ||
         uiState.showSettingsSheet ||
         uiState.showToolsSheet ||
+        uiState.showAiSheet ||
+        uiState.showHistorySheet ||
+        uiState.showBookmarksSheet ||
+        uiState.showPrivacySheet ||
         (uiState.selectedMediaForConfirmation != null) ||
         (activeTab?.canGoBack == true) ||
         !isFrontPage
@@ -152,6 +185,10 @@ fun BrowserScreen(
             uiState.showDetectionSheet -> viewModel.closeDetectionSheet()
             uiState.showDownloadsSheet -> viewModel.closeDownloadsSheet()
             uiState.showTabsSheet -> viewModel.closeTabsSheet()
+            uiState.showAiSheet -> viewModel.closeAiSheet()
+            uiState.showHistorySheet -> viewModel.closeHistorySheet()
+            uiState.showBookmarksSheet -> viewModel.closeBookmarksSheet()
+            uiState.showPrivacySheet -> viewModel.closePrivacySheet()
             uiState.selectedMediaForConfirmation != null -> viewModel.dismissConfirmationDialog()
             activeTab != null && activeTab.canGoBack -> {
                 viewModel.navigateBack()
@@ -166,7 +203,13 @@ fun BrowserScreen(
         modifier = modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            if (!isFullscreen && !isFrontPage) {
+            AnimatedVisibility(
+                visible = !isFullscreen && !isFrontPage,
+                enter = MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast) +
+                    expandVertically(animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+                exit = MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Micro) +
+                    shrinkVertically(animationSpec = motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion))
+            ) {
                 BrowserTopBar(
                     urlInput = uiState.urlInput,
                     isLoading = activeTab?.isLoading ?: false,
@@ -214,54 +257,74 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .blur(contentBlur)
         ) {
-            if (isFrontPage) {
-                NovaFrontPage(
-                    customWallpaperPath = uiState.customWallpaperPath,
-                    onSearch = viewModel::submitUrl,
-                    onOpenSettings = viewModel::openSettingsSheet,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Error Banner if webpage failed
-                    val errorMessage = activeTab?.errorMessage
-                    AnimatedVisibility(
-                        visible = errorMessage != null,
-                        enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(200)),
-                        exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(150))
-                    ) {
-                        if (errorMessage != null) {
-                            ErrorBanner(
-                                message = errorMessage,
-                                onRetry = { viewModel.loadUrlInActiveTab(activeTab.url) },
-                                onDismiss = { /* dismiss */ }
-                            )
-                        }
+            AnimatedContent(
+                targetState = isFrontPage,
+                transitionSpec = {
+                    if (targetState) {
+                        // Returning to front page (Home)
+                        MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast) togetherWith
+                            MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Micro)
+                    } else {
+                        // Opening a new page from front page
+                        MotionTransitions.scaleFadeIn(isReducedMotion, initialScale = 0.985f, durationMillis = MotionDurations.Fast) togetherWith
+                            MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Micro)
                     }
-
-                    // WebView Container
-                    Box(modifier = Modifier.weight(1f)) {
-                        activeTab?.let { tab ->
-                            androidx.compose.runtime.key(tab.id) {
-                                BrowserWebView(
-                                    viewModel = viewModel,
-                                    targetUrl = tab.url,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .testTag("browser_webview"),
-                                    onFullscreenStateChange = { inFullscreen, view, exitCallback ->
-                                        isFullscreen = inFullscreen
-                                        fullscreenCustomView = view
-                                        exitFullscreenCallback = exitCallback
-                                    }
+                },
+                label = "pageFrontPageTransition",
+                modifier = Modifier.fillMaxSize()
+            ) { frontPage ->
+                if (frontPage) {
+                    NovaFrontPage(
+                        customWallpaperPath = uiState.customWallpaperPath,
+                        onSearch = viewModel::submitUrl,
+                        onOpenSettings = viewModel::openSettingsSheet,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Error Banner if webpage failed
+                        val errorMessage = activeTab?.errorMessage
+                        AnimatedVisibility(
+                            visible = errorMessage != null,
+                            enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(200)),
+                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(150))
+                        ) {
+                            if (errorMessage != null) {
+                                ErrorBanner(
+                                    message = errorMessage,
+                                    onRetry = { viewModel.loadUrlInActiveTab(activeTab.url) },
+                                    onDismiss = { /* dismiss */ }
                                 )
+                            }
+                        }
+
+                        // WebView Container
+                        Box(modifier = Modifier.weight(1f)) {
+                            activeTab?.let { tab ->
+                                androidx.compose.runtime.key(tab.id) {
+                                    BrowserWebView(
+                                        viewModel = viewModel,
+                                        targetUrl = tab.url,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .testTag("browser_webview"),
+                                        onFullscreenStateChange = { inFullscreen, view, exitCallback ->
+                                            isFullscreen = inFullscreen
+                                            fullscreenCustomView = view
+                                            exitFullscreenCallback = exitCallback
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
 
-                // Floating Download Orb
+            // Floating Download Orb
+            if (!isFrontPage) {
                 DownloadOrb(
                     visible = uiState.isOrbVisible,
                     detectedCount = if (detectedGroupedVideos.isNotEmpty()) detectedGroupedVideos.size else detectedMediaList.size,
@@ -297,20 +360,18 @@ fun BrowserScreen(
         }
     }
 
-    // Modal Sheets and Dialogs
+    // Modal Sheets and Dialogs (All powered by unified Glass Overlay system)
 
-    if (uiState.showDetectionSheet) {
-        DetectedMediaSheet(
-            sheetState = detectionSheetState,
-            pageTitle = activeTab?.title ?: "Webpage",
-            pageUrl = activeTab?.url ?: "",
-            groupedVideos = detectedGroupedVideos,
-            mediaList = detectedMediaList,
-            onDismiss = viewModel::closeDetectionSheet,
-            onSelectMedia = viewModel::selectMediaForConfirmation,
-            onSelectQuality = viewModel::selectQuality
-        )
-    }
+    DetectedMediaSheet(
+        visible = uiState.showDetectionSheet,
+        pageTitle = activeTab?.title ?: "Webpage",
+        pageUrl = activeTab?.url ?: "",
+        groupedVideos = detectedGroupedVideos,
+        mediaList = detectedMediaList,
+        onDismiss = viewModel::closeDetectionSheet,
+        onSelectMedia = viewModel::selectMediaForConfirmation,
+        onSelectQuality = viewModel::selectQuality
+    )
 
     if (uiState.selectedMediaForConfirmation != null) {
         DownloadConfirmationDialog(
@@ -324,54 +385,48 @@ fun BrowserScreen(
         )
     }
 
-    if (uiState.showDownloadsSheet) {
-        DownloadManagerSheet(
-            sheetState = downloadsSheetState,
-            tasks = downloadTasks,
-            onCancelTask = viewModel::cancelDownload,
-            onRemoveTask = viewModel::removeDownload,
-            onRetryTask = viewModel::retryDownload,
-            onPauseTask = viewModel::pauseDownload,
-            onResumeTask = viewModel::resumeDownload,
-            onPauseAll = viewModel::pauseAllDownloads,
-            onResumeAll = viewModel::resumeAllDownloads,
-            onClearCompleted = viewModel::clearCompletedDownloads,
-            onDismiss = viewModel::closeDownloadsSheet
-        )
-    }
+    DownloadManagerSheet(
+        visible = uiState.showDownloadsSheet,
+        tasks = downloadTasks,
+        onCancelTask = viewModel::cancelDownload,
+        onRemoveTask = viewModel::removeDownload,
+        onRetryTask = viewModel::retryDownload,
+        onPauseTask = viewModel::pauseDownload,
+        onResumeTask = viewModel::resumeDownload,
+        onPauseAll = viewModel::pauseAllDownloads,
+        onResumeAll = viewModel::resumeAllDownloads,
+        onClearCompleted = viewModel::clearCompletedDownloads,
+        onDismiss = viewModel::closeDownloadsSheet
+    )
 
-    if (uiState.showTabsSheet) {
-        TabsSheet(
-            sheetState = tabsSheetState,
-            tabs = uiState.tabs,
-            activeTabId = uiState.activeTabId,
-            onSelectTab = viewModel::switchTab,
-            onCloseTab = viewModel::closeTab,
-            onNewTab = { viewModel.addNewTab() },
-            onDismiss = viewModel::closeTabsSheet
-        )
-    }
+    TabsSheet(
+        visible = uiState.showTabsSheet,
+        tabs = uiState.tabs,
+        activeTabId = uiState.activeTabId,
+        onSelectTab = viewModel::switchTab,
+        onCloseTab = viewModel::closeTab,
+        onNewTab = { viewModel.addNewTab() },
+        onDismiss = viewModel::closeTabsSheet
+    )
 
-    if (uiState.showSettingsSheet) {
-        BrowserSettingsSheet(
-            sheetState = settingsSheetState,
-            currentSearchEngine = uiState.searchEngine,
-            currentThemeMode = uiState.themeMode,
-            currentColorTheme = uiState.colorTheme,
-            currentFontFamily = uiState.appFontFamily,
-            customWallpaperPath = uiState.customWallpaperPath,
-            onSelectSearchEngine = viewModel::setSearchEngine,
-            onSelectThemeMode = viewModel::setThemeMode,
-            onSelectColorTheme = viewModel::setColorTheme,
-            onSelectFontFamily = viewModel::setFontFamily,
-            onUploadWallpaper = viewModel::setCustomWallpaperFromUri,
-            onRemoveWallpaper = viewModel::removeCustomWallpaper,
-            onClearCache = viewModel::clearBrowserCache,
-            isAdBlockerActive = uiState.isAdBlockerEnabled,
-            onToggleAdBlocker = viewModel::toggleAdBlocker,
-            onDismiss = viewModel::closeSettingsSheet
-        )
-    }
+    BrowserSettingsSheet(
+        visible = uiState.showSettingsSheet,
+        currentSearchEngine = uiState.searchEngine,
+        currentThemeMode = uiState.themeMode,
+        currentColorTheme = uiState.colorTheme,
+        currentFontFamily = uiState.appFontFamily,
+        customWallpaperPath = uiState.customWallpaperPath,
+        onSelectSearchEngine = viewModel::setSearchEngine,
+        onSelectThemeMode = viewModel::setThemeMode,
+        onSelectColorTheme = viewModel::setColorTheme,
+        onSelectFontFamily = viewModel::setFontFamily,
+        onUploadWallpaper = viewModel::setCustomWallpaperFromUri,
+        onRemoveWallpaper = viewModel::removeCustomWallpaper,
+        onClearCache = viewModel::clearBrowserCache,
+        isAdBlockerActive = uiState.isAdBlockerEnabled,
+        onToggleAdBlocker = viewModel::toggleAdBlocker,
+        onDismiss = viewModel::closeSettingsSheet
+    )
 
     NovaToolsSheet(
         visible = uiState.showToolsSheet,
@@ -392,7 +447,59 @@ fun BrowserScreen(
         onSniffUrl = viewModel::submitUrl,
         onReloadPage = viewModel::reloadActiveTab,
         onToggleDesktopMode = viewModel::toggleDesktopModeForActiveTab,
-        onOpenDetectedMedia = viewModel::openDetectionSheet
+        onOpenDetectedMedia = viewModel::openDetectionSheet,
+        onOpenAi = viewModel::openAiSheet,
+        onOpenHistory = viewModel::openHistorySheet,
+        onOpenBookmarks = viewModel::openBookmarksSheet,
+        onOpenPrivacy = viewModel::openPrivacySheet
+    )
+
+    NovaAiSheet(
+        visible = uiState.showAiSheet,
+        pageTitle = activeTab?.title,
+        pageUrl = activeTab?.url,
+        detectedMedia = detectedMediaList,
+        onDismiss = viewModel::closeAiSheet,
+        onNavigateUrl = { url ->
+            viewModel.closeAiSheet()
+            viewModel.loadUrlInActiveTab(url)
+        }
+    )
+
+    BrowserHistorySheet(
+        visible = uiState.showHistorySheet,
+        historyList = uiState.historyEntries,
+        onSelectUrl = { url ->
+            viewModel.closeHistorySheet()
+            viewModel.loadUrlInActiveTab(url)
+        },
+        onClearHistory = viewModel::clearHistory,
+        onDismiss = viewModel::closeHistorySheet
+    )
+
+    BrowserBookmarksSheet(
+        visible = uiState.showBookmarksSheet,
+        bookmarksList = uiState.bookmarkEntries,
+        currentPageUrl = activeTab?.url,
+        currentPageTitle = activeTab?.title,
+        onSelectBookmark = { url ->
+            viewModel.closeBookmarksSheet()
+            viewModel.loadUrlInActiveTab(url)
+        },
+        onAddCurrentPage = viewModel::addBookmarkForCurrentPage,
+        onDeleteBookmark = viewModel::removeBookmark,
+        onDismiss = viewModel::closeBookmarksSheet
+    )
+
+    BrowserPrivacySheet(
+        visible = uiState.showPrivacySheet,
+        pageUrl = activeTab?.url,
+        isAdBlockerActive = uiState.isAdBlockerEnabled,
+        blockedAdsOnPage = uiState.activeTabBlockedAds,
+        totalBlockedAds = uiState.totalBlockedAds,
+        onToggleAdBlocker = viewModel::toggleAdBlocker,
+        onClearCache = viewModel::clearBrowserCache,
+        onDismiss = viewModel::closePrivacySheet
     )
 }
 

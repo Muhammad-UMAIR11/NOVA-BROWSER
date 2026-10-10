@@ -65,9 +65,17 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.videobrowser.ui.glass.GlassBottomSheet
+import com.example.videobrowser.ui.glass.GlassTokens
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MenuMotionSpecs
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -85,7 +93,7 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BrowserSettingsSheet(
-    sheetState: SheetState,
+    sheetState: SheetState? = null,
     currentSearchEngine: SearchEngine,
     currentThemeMode: ThemeMode,
     currentColorTheme: ColorTheme,
@@ -100,7 +108,8 @@ fun BrowserSettingsSheet(
     onRemoveWallpaper: () -> Unit = {},
     onClearCache: () -> Unit,
     onToggleAdBlocker: () -> Unit = {},
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    visible: Boolean = true
 ) {
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -118,57 +127,21 @@ fun BrowserSettingsSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.testTag("settings_bottom_sheet")
+    val isReducedMotion = LocalReducedMotion.current
+
+    GlassBottomSheet(
+        visible = visible,
+        onDismiss = onDismiss,
+        title = "Nova Settings",
+        subtitle = "Engines, themes, wallpapers & security",
+        icon = Icons.Default.Palette,
+        testTag = "settings_bottom_sheet"
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    GlowingMoonOrb(modifier = Modifier.size(38.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Nova Settings",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Engines, themes, wallpapers & security",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.testTag("close_settings_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close Settings",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(16.dp))
-
             // 1. Search Engine Section
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(

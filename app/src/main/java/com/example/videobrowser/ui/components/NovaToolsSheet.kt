@@ -35,10 +35,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -47,6 +49,9 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.shadow
+import com.example.videobrowser.ui.glass.GlassTokens
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -87,6 +92,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MenuMotionSpecs
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.motionTween
 import kotlin.math.roundToInt
 
 /**
@@ -120,17 +129,22 @@ fun NovaToolsSheet(
     onReloadPage: () -> Unit = {},
     onToggleDesktopMode: () -> Unit = {},
     onOpenDetectedMedia: () -> Unit = {},
+    onOpenAi: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
+    onOpenBookmarks: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val moonlightWhite = Color(0xFFF8FAFC)
     val moonlightMuted = Color(0xFF94A3B8)
     val sheetBackground = Color(0xFF090D16)
-    val cardBackground = Color(0xFF131B2E).copy(alpha = 0.85f)
-    val cardBorder = Color(0xFF334155).copy(alpha = 0.6f)
+    val cardBackground = GlassTokens.GlassCardBg
+    val cardBorder = GlassTokens.GlassBorderDim
 
     var directUrlInput by remember { mutableStateOf("") }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
+    val isReducedMotion = LocalReducedMotion.current
     val scrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -183,8 +197,8 @@ fun NovaToolsSheet(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(220)),
-        exit = fadeOut(tween(200)),
+        enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+        exit = fadeOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)),
         modifier = modifier.fillMaxSize()
     ) {
         Box(
@@ -193,11 +207,11 @@ fun NovaToolsSheet(
                 .testTag("nova_tools_overlay"),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Scrim (tap outside to smoothly dismiss)
+            // Frosted glass scrim (tap outside to smoothly dismiss; underlying webpage remains softly visible)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.65f))
+                    .background(GlassTokens.GlassScrim)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -208,29 +222,35 @@ fun NovaToolsSheet(
             // Sliding Tools Sheet Container with real-time gesture offset
             AnimatedVisibility(
                 visible = visible,
-                enter = slideInVertically(
-                    initialOffsetY = { it },
-                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)
-                ),
-                exit = slideOutVertically(
-                    targetOffsetY = { it },
-                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
-                )
+                enter = MenuMotionSpecs.menuEnter(isReducedMotion, fromBottom = true),
+                exit = MenuMotionSpecs.menuExit(isReducedMotion, toBottom = true)
             ) {
+                val panelShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .offset { IntOffset(0, dragOffsetY.roundToInt()) }
                         .nestedScroll(nestedScrollConnection)
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                        .shadow(
+                            elevation = 28.dp,
+                            shape = panelShape,
+                            ambientColor = GlassTokens.GlowCyan,
+                            spotColor = GlassTokens.GlowIndigo
+                        )
+                        .clip(panelShape)
                         .border(
-                            1.dp,
-                            Color(0xFF334155).copy(alpha = 0.45f),
-                            RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                            width = 1.2.dp,
+                            brush = GlassTokens.glassBorderBrush(panelShape),
+                            shape = panelShape
+                        )
+                        .background(
+                            brush = GlassTokens.glassSurfaceBrush(),
+                            shape = panelShape
                         )
                         .testTag("nova_tools_sheet_surface"),
-                    color = sheetBackground,
-                    shadowElevation = 16.dp
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier
@@ -807,9 +827,9 @@ fun NovaToolsSheet(
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // EXPANDABLE EXTENSIONS / RESERVED FUNCTION SLOTS
+                        // ADVANCED GLASS PANELS & UTILITIES
                         Text(
-                            text = "EXPANDABLE EXTENSIONS (RESERVED)",
+                            text = "SMART CAPABILITIES & PANELS",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = moonlightMuted.copy(alpha = 0.8f),
@@ -821,26 +841,83 @@ fun NovaToolsSheet(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            ReservedSheetSlot(
-                                title = "Reader Mode",
-                                subtitle = "Distraction-free reading view",
-                                status = "Reserved",
-                                cardBg = Color(0xFF0F172A).copy(alpha = 0.4f),
-                                cardBorder = Color(0xFF334155).copy(alpha = 0.3f),
-                                textColor = moonlightWhite.copy(alpha = 0.7f),
-                                subtextColor = moonlightMuted.copy(alpha = 0.6f),
-                                modifier = Modifier.weight(1f)
+                            SheetToolItem(
+                                icon = Icons.Default.AutoAwesome,
+                                title = "Nova AI Assistant",
+                                subtitle = "Summary, media & ask",
+                                iconTint = Color(0xFF38BDF8),
+                                cardBg = cardBackground,
+                                cardBorder = cardBorder,
+                                textColor = moonlightWhite,
+                                subtextColor = moonlightMuted,
+                                onClick = {
+                                    onDismiss()
+                                    onOpenAi()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("tools_sheet_item_ai")
                             )
 
-                            ReservedSheetSlot(
-                                title = "Tracker Shield",
-                                subtitle = "Zero telemetry protection",
-                                status = "Active",
-                                cardBg = Color(0xFF0F172A).copy(alpha = 0.4f),
-                                cardBorder = Color(0xFF334155).copy(alpha = 0.3f),
-                                textColor = moonlightWhite.copy(alpha = 0.7f),
-                                subtextColor = moonlightMuted.copy(alpha = 0.6f),
-                                modifier = Modifier.weight(1f)
+                            SheetToolItem(
+                                icon = Icons.Default.Bookmark,
+                                title = "Bookmarks",
+                                subtitle = "Saved favorites",
+                                iconTint = Color(0xFFFBBF24),
+                                cardBg = cardBackground,
+                                cardBorder = cardBorder,
+                                textColor = moonlightWhite,
+                                subtextColor = moonlightMuted,
+                                onClick = {
+                                    onDismiss()
+                                    onOpenBookmarks()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("tools_sheet_item_bookmarks")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            SheetToolItem(
+                                icon = Icons.Default.History,
+                                title = "Browsing History",
+                                subtitle = "Recently visited sites",
+                                iconTint = Color(0xFF818CF8),
+                                cardBg = cardBackground,
+                                cardBorder = cardBorder,
+                                textColor = moonlightWhite,
+                                subtextColor = moonlightMuted,
+                                onClick = {
+                                    onDismiss()
+                                    onOpenHistory()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("tools_sheet_item_history")
+                            )
+
+                            SheetToolItem(
+                                icon = Icons.Default.Security,
+                                title = "Privacy Shield",
+                                subtitle = "Trackers & TLS audit",
+                                iconTint = Color(0xFF10B981),
+                                cardBg = cardBackground,
+                                cardBorder = cardBorder,
+                                textColor = moonlightWhite,
+                                subtextColor = moonlightMuted,
+                                onClick = {
+                                    onDismiss()
+                                    onOpenPrivacy()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("tools_sheet_item_privacy_shield")
                             )
                         }
 
@@ -861,15 +938,14 @@ private fun PageActionPill(
     modifier: Modifier = Modifier
 ) {
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        color = if (active) Color(0xFF38BDF8).copy(alpha = 0.2f) else Color(0xFF1E293B),
+        color = if (active) Color(0xFF38BDF8).copy(alpha = 0.2f) else GlassTokens.GlassCardBg,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (active) Color(0xFF38BDF8).copy(alpha = 0.6f) else Color(0xFF334155).copy(alpha = 0.5f)
+            if (active) Color(0xFF38BDF8).copy(alpha = 0.6f) else GlassTokens.GlassBorderDim
         ),
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
@@ -911,13 +987,12 @@ private fun SheetToolItem(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, cardBorder, RoundedCornerShape(16.dp))
-            .clickable { onClick() },
+        onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color = cardBg,
-        shadowElevation = 2.dp
+        border = androidx.compose.foundation.BorderStroke(1.dp, cardBorder),
+        shadowElevation = 2.dp,
+        modifier = modifier
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(

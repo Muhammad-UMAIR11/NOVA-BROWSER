@@ -19,9 +19,23 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import com.example.videobrowser.ui.components.DownloadManagerSheet
+import org.junit.Rule
+
+@OptIn(ExperimentalMaterial3Api::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class DownloadManagerTest {
+
+    @get:Rule
+    val composeTestRule = createComposeRule()
 
     private lateinit var app: Application
     private lateinit var engine: DownloadEngine
@@ -218,5 +232,121 @@ class DownloadManagerTest {
 
         viewModel.resumeAllDownloads()
         assertEquals("All downloads resumed", viewModel.uiState.value.statusNotice)
+    }
+
+    @Test
+    fun `download manager renders animated cards for active, paused, and completed tasks`() {
+        val activeTask = DownloadTask(
+            id = "anim-1",
+            title = "Animated Video",
+            mediaUrl = "https://example.com/video1.mp4",
+            pageUrl = "https://example.com",
+            fileName = "animation_test.mp4",
+            mimeType = "video/mp4",
+            format = "MP4",
+            quality = "1080p",
+            totalBytes = 10_000_000L,
+            downloadedBytes = 5_000_000L,
+            status = DownloadStatus.DOWNLOADING,
+            progress = 0.5f,
+            speedFormatted = "2.4 MB/s"
+        )
+
+        val completedTask = DownloadTask(
+            id = "anim-2",
+            title = "Completed Video",
+            mediaUrl = "https://example.com/video2.mp4",
+            pageUrl = "https://example.com",
+            fileName = "completed_video.mp4",
+            mimeType = "video/mp4",
+            format = "MP4",
+            quality = "720p",
+            totalBytes = 8_000_000L,
+            downloadedBytes = 8_000_000L,
+            status = DownloadStatus.COMPLETED,
+            progress = 1.0f
+        )
+
+        var pauseClicked = false
+        var cancelClicked = false
+        var openClicked = false
+        var removeClicked = false
+
+        composeTestRule.setContent {
+            DownloadManagerSheet(
+                visible = true,
+                tasks = listOf(activeTask, completedTask),
+                onCancelTask = { cancelClicked = true },
+                onRemoveTask = { removeClicked = true },
+                onPauseTask = { pauseClicked = true },
+                onResumeTask = {},
+                onDismiss = {}
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        // Verify the Download Manager Sheet header and active card
+        composeTestRule.onNodeWithTag("downloads_bottom_sheet").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("download_task_card_anim-1").assertIsDisplayed()
+
+        // Check active task animated items
+        composeTestRule.onNodeWithText("animation_test.mp4").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Downloading").assertIsDisplayed()
+        composeTestRule.onNodeWithText("50%").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("pause_download_button_anim-1").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("pause_download_button_anim-1").performClick()
+        assertTrue(pauseClicked)
+
+        composeTestRule.onNodeWithTag("cancel_download_button_anim-1").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("cancel_download_button_anim-1").performClick()
+        assertTrue(cancelClicked)
+    }
+
+    @Test
+    fun `completed download card transitions into completed state with open and remove affordances`() {
+        val completedTask = DownloadTask(
+            id = "completed-1",
+            title = "Completed Video",
+            mediaUrl = "https://example.com/video2.mp4",
+            pageUrl = "https://example.com",
+            fileName = "completed_video.mp4",
+            mimeType = "video/mp4",
+            format = "MP4",
+            quality = "720p",
+            totalBytes = 8_000_000L,
+            downloadedBytes = 8_000_000L,
+            status = DownloadStatus.COMPLETED,
+            progress = 1.0f
+        )
+
+        var openClicked = false
+        var removeClicked = false
+
+        composeTestRule.setContent {
+            DownloadManagerSheet(
+                visible = true,
+                tasks = listOf(completedTask),
+                onCancelTask = {},
+                onRemoveTask = { removeClicked = true },
+                onPauseTask = {},
+                onResumeTask = {},
+                onDismiss = {}
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        // Card and completed banner transitions
+        composeTestRule.onNodeWithTag("download_task_card_completed-1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("completed_video.mp4").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Completed").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Download complete • Saved to storage").assertIsDisplayed()
+
+        // Open button
+        composeTestRule.onNodeWithTag("open_file_button_completed-1").assertIsDisplayed()
+
+        // Remove button
+        composeTestRule.onNodeWithTag("remove_download_button_completed-1").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("remove_download_button_completed-1").performClick()
+        assertTrue(removeClicked)
     }
 }

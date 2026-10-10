@@ -9,11 +9,16 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.example.videobrowser.model.AppFontFamily
 import com.example.videobrowser.model.ColorTheme
 import com.example.videobrowser.model.ThemeMode
+import com.example.videobrowser.ui.motion.LocalMotionScheme
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionScheme
+import com.example.videobrowser.ui.motion.rememberReducedMotion
 
 private fun createCustomColorScheme(colorTheme: ColorTheme, isDark: Boolean): ColorScheme {
     val primary = Color(colorTheme.primaryColor)
@@ -123,10 +128,16 @@ fun MyApplicationTheme(
     }
 
     val typography = createAppTypography(getComposeFontFamily(fontFamilyChoice))
+    val isReducedMotion = rememberReducedMotion()
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = typography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalReducedMotion provides isReducedMotion,
+        LocalMotionScheme provides MotionScheme.Default
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = typography,
+            content = content
+        )
+    }
 }

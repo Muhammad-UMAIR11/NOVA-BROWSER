@@ -50,6 +50,20 @@ data class QuickBookmark(
     val tag: String
 )
 
+data class HistoryItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val url: String,
+    val title: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class BookmarkItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val url: String,
+    val title: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 enum class OrbStatus {
     HIDDEN,
     DETECTING,
@@ -68,6 +82,16 @@ data class BrowserUiState(
     val showTabsSheet: Boolean = false,
     val showSettingsSheet: Boolean = false,
     val showToolsSheet: Boolean = false,
+    val showAiSheet: Boolean = false,
+    val showHistorySheet: Boolean = false,
+    val showBookmarksSheet: Boolean = false,
+    val showPrivacySheet: Boolean = false,
+    val historyEntries: List<HistoryItem> = emptyList(),
+    val bookmarkEntries: List<BookmarkItem> = listOf(
+        BookmarkItem(url = "https://en.wikipedia.org", title = "Wikipedia"),
+        BookmarkItem(url = "https://archive.org", title = "Internet Archive"),
+        BookmarkItem(url = "https://github.com", title = "GitHub")
+    ),
     val searchEngine: SearchEngine = SearchEngine.DUCKDUCKGO,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val colorTheme: ColorTheme = ColorTheme.OCEAN_BLUE,
@@ -227,8 +251,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         isLoading = !isNovaHome,
                         progress = if (isNovaHome) 0 else tab.progress,
                         errorMessage = null,
-                        detectedMediaList = if (isNovaHome) emptyList() else tab.detectedMediaList,
-                        groupedVideos = if (isNovaHome) emptyList() else tab.groupedVideos,
+                        detectedMediaList = emptyList(),
+                        groupedVideos = emptyList(),
                         activePlayingMedia = null
                     )
                 } else tab
@@ -364,7 +388,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     )
                 } else tab
             }
-            state.copy(tabs = updatedTabs, urlInput = url)
+            val updatedHistory = if (url.isNotBlank() && url != NOVA_HOME_URL && !url.startsWith("about:")) {
+                listOf(HistoryItem(url = url, title = finalTitle)) + state.historyEntries.filterNot { it.url == url }
+            } else {
+                state.historyEntries
+            }
+            state.copy(tabs = updatedTabs, urlInput = url, historyEntries = updatedHistory)
         }
     }
 
@@ -851,6 +880,66 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun toggleToolsSheet() {
         _uiState.update { it.copy(showToolsSheet = !it.showToolsSheet) }
+    }
+
+    fun openAiSheet() {
+        _uiState.update { it.copy(showAiSheet = true, showToolsSheet = false) }
+    }
+
+    fun closeAiSheet() {
+        _uiState.update { it.copy(showAiSheet = false) }
+    }
+
+    fun openHistorySheet() {
+        _uiState.update { it.copy(showHistorySheet = true, showToolsSheet = false) }
+    }
+
+    fun closeHistorySheet() {
+        _uiState.update { it.copy(showHistorySheet = false) }
+    }
+
+    fun openBookmarksSheet() {
+        _uiState.update { it.copy(showBookmarksSheet = true, showToolsSheet = false) }
+    }
+
+    fun closeBookmarksSheet() {
+        _uiState.update { it.copy(showBookmarksSheet = false) }
+    }
+
+    fun openPrivacySheet() {
+        _uiState.update { it.copy(showPrivacySheet = true, showToolsSheet = false) }
+    }
+
+    fun closePrivacySheet() {
+        _uiState.update { it.copy(showPrivacySheet = false) }
+    }
+
+    fun addBookmarkForCurrentPage() {
+        val tab = _uiState.value.activeTab ?: return
+        val url = tab.url
+        val title = tab.title.ifBlank { url }
+        if (url.isNotBlank() && url != NOVA_HOME_URL) {
+            val item = BookmarkItem(url = url, title = title)
+            _uiState.update {
+                it.copy(
+                    bookmarkEntries = listOf(item) + it.bookmarkEntries.filterNot { b -> b.url == url },
+                    statusNotice = "Saved to Bookmarks"
+                )
+            }
+        }
+    }
+
+    fun removeBookmark(id: String) {
+        _uiState.update {
+            it.copy(
+                bookmarkEntries = it.bookmarkEntries.filterNot { it.id == id },
+                statusNotice = "Bookmark removed"
+            )
+        }
+    }
+
+    fun clearHistory() {
+        _uiState.update { it.copy(historyEntries = emptyList(), statusNotice = "Browsing history cleared") }
     }
 
     fun toggleDesktopModeForActiveTab() {

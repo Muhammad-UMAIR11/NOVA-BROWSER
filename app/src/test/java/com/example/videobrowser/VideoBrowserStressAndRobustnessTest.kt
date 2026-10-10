@@ -86,7 +86,7 @@ class VideoBrowserStressAndRobustnessTest {
         val firstTabId = viewModel.uiState.value.tabs.first().id
         viewModel.switchTab(firstTabId)
         assertEquals(firstTabId, viewModel.uiState.value.activeTabId)
-        assertEquals("https://duckduckgo.com", viewModel.uiState.value.activeTab?.url)
+        assertEquals(BrowserViewModel.NOVA_HOME_URL, viewModel.uiState.value.activeTab?.url)
     }
 
     @Test

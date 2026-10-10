@@ -51,11 +51,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.example.videobrowser.ui.glass.GlassBottomSheet
+import com.example.videobrowser.ui.glass.GlassTokens
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,14 +83,15 @@ import com.example.videobrowser.model.VideoQualityOption
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetectedMediaSheet(
-    sheetState: SheetState,
+    sheetState: SheetState? = null,
     pageTitle: String,
     pageUrl: String,
     groupedVideos: List<GroupedVideoMedia> = emptyList(),
     mediaList: List<DetectedMedia> = emptyList(),
     onDismiss: () -> Unit,
     onSelectMedia: (DetectedMedia) -> Unit,
-    onSelectQuality: (groupId: String, qualityId: String) -> Unit = { _, _ -> }
+    onSelectQuality: (groupId: String, qualityId: String) -> Unit = { _, _ -> },
+    visible: Boolean = true
 ) {
     val context = LocalContext.current
 
@@ -104,58 +106,19 @@ fun DetectedMediaSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+    GlassBottomSheet(
+        visible = visible,
+        onDismiss = onDismiss,
+        title = "Detected Videos",
+        subtitle = pageTitle.ifBlank { pageUrl },
+        icon = Icons.Default.VideoFile,
+        testTag = "detected_media_bottom_sheet"
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(vertical = 4.dp)
         ) {
-            // Header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.VideoFile,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Detected Videos",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = pageTitle.ifBlank { pageUrl },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    val count = displayGroups.size
-                    Text(
-                        text = if (count == 1) "1 video" else "$count videos",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
 
             if (displayGroups.isEmpty()) {
                 // Empty state
