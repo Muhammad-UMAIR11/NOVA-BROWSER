@@ -84,6 +84,7 @@ import com.example.videobrowser.ui.components.NovaAiSheet
 import com.example.videobrowser.ui.components.NovaFrontPage
 import com.example.videobrowser.ui.components.NovaToolsSheet
 import com.example.videobrowser.ui.components.TabsSheet
+import com.example.videobrowser.ui.components.WebPageLoadingSkeleton
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionDurations
 import com.example.videobrowser.ui.motion.MotionTransitions
@@ -315,6 +316,19 @@ fun BrowserScreen(
                                             fullscreenCustomView = view
                                             exitFullscreenCallback = exitCallback
                                         }
+                                    )
+                                }
+
+                                // Web page loading skeleton overlay representing the actual progress from WebView engine
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = tab.isLoading && tab.progress < 70 && tab.url.isNotBlank() && tab.url != BrowserViewModel.NOVA_HOME_URL,
+                                    enter = fadeIn(tween(140)),
+                                    exit = fadeOut(tween(220))
+                                ) {
+                                    WebPageLoadingSkeleton(
+                                        progress = tab.progress,
+                                        url = tab.url,
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
                             }

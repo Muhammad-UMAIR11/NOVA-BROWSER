@@ -29,6 +29,15 @@ data class VideoQualityOption(
     val bandwidth: Long = 0L,
     val sourceMediaId: String = ""
 ) {
+    val isAudioOnly: Boolean
+        get() = mimeType.startsWith("audio/") ||
+            format.equals("MP3", ignoreCase = true) ||
+            format.equals("M4A", ignoreCase = true) ||
+            format.equals("AAC", ignoreCase = true) ||
+            format.equals("Audio", ignoreCase = true) ||
+            resolutionShort.equals("Audio", ignoreCase = true) ||
+            resolutionLabel.contains("Audio", ignoreCase = true)
+
     val effectiveBytes: Long
         get() = if (contentLength > 0) contentLength else estimatedBytes
 

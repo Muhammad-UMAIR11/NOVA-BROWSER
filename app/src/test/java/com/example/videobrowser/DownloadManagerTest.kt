@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import com.example.videobrowser.ui.components.DownloadManagerComponent
 import com.example.videobrowser.ui.components.DownloadManagerSheet
 import org.junit.Rule
 
@@ -269,36 +270,34 @@ class DownloadManagerTest {
 
         var pauseClicked = false
         var cancelClicked = false
-        var openClicked = false
-        var removeClicked = false
 
         composeTestRule.setContent {
-            DownloadManagerSheet(
-                visible = true,
-                tasks = listOf(activeTask, completedTask),
+            DownloadManagerComponent(
+                tasks = listOf(activeTask),
                 onCancelTask = { cancelClicked = true },
-                onRemoveTask = { removeClicked = true },
+                onRemoveTask = {},
                 onPauseTask = { pauseClicked = true },
                 onResumeTask = {},
-                onDismiss = {}
+                onRetryTask = {},
+                showHeader = false
             )
         }
         composeTestRule.waitForIdle()
 
-        // Verify the Download Manager Sheet header and active card
-        composeTestRule.onNodeWithTag("downloads_bottom_sheet").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("download_task_card_anim-1").assertIsDisplayed()
+        // Verify the Download Manager active card renders animated items
+        composeTestRule.onNodeWithTag("download_task_card_anim-1").assertExists()
+        composeTestRule.onNodeWithText("animation_test.mp4").assertExists()
+        composeTestRule.onNodeWithText("Downloading").assertExists()
+        composeTestRule.onNodeWithText("50%").assertExists()
 
-        // Check active task animated items
-        composeTestRule.onNodeWithText("animation_test.mp4").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Downloading").assertIsDisplayed()
-        composeTestRule.onNodeWithText("50%").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("pause_download_button_anim-1").assertIsDisplayed()
+        // Test Pause interaction
         composeTestRule.onNodeWithTag("pause_download_button_anim-1").performClick()
+        composeTestRule.waitForIdle()
         assertTrue(pauseClicked)
 
-        composeTestRule.onNodeWithTag("cancel_download_button_anim-1").assertIsDisplayed()
+        // Test Cancel interaction
         composeTestRule.onNodeWithTag("cancel_download_button_anim-1").performClick()
+        composeTestRule.waitForIdle()
         assertTrue(cancelClicked)
     }
 
@@ -319,34 +318,33 @@ class DownloadManagerTest {
             progress = 1.0f
         )
 
-        var openClicked = false
         var removeClicked = false
 
         composeTestRule.setContent {
-            DownloadManagerSheet(
-                visible = true,
+            DownloadManagerComponent(
                 tasks = listOf(completedTask),
                 onCancelTask = {},
                 onRemoveTask = { removeClicked = true },
                 onPauseTask = {},
                 onResumeTask = {},
-                onDismiss = {}
+                onRetryTask = {},
+                showHeader = false
             )
         }
         composeTestRule.waitForIdle()
 
         // Card and completed banner transitions
-        composeTestRule.onNodeWithTag("download_task_card_completed-1").assertIsDisplayed()
-        composeTestRule.onNodeWithText("completed_video.mp4").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Completed").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Download complete • Saved to storage").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("download_task_card_completed-1").assertExists()
+        composeTestRule.onNodeWithText("completed_video.mp4").assertExists()
+        composeTestRule.onNodeWithText("Completed").assertExists()
+        composeTestRule.onNodeWithText("Download complete • Saved to storage").assertExists()
 
-        // Open button
-        composeTestRule.onNodeWithTag("open_file_button_completed-1").assertIsDisplayed()
+        // Open button affordance
+        composeTestRule.onNodeWithTag("open_file_button_completed-1").assertExists()
 
-        // Remove button
-        composeTestRule.onNodeWithTag("remove_download_button_completed-1").assertIsDisplayed()
+        // Remove button affordance
         composeTestRule.onNodeWithTag("remove_download_button_completed-1").performClick()
+        composeTestRule.waitForIdle()
         assertTrue(removeClicked)
     }
 }

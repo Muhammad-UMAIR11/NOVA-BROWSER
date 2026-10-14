@@ -2,14 +2,27 @@ package com.example.videobrowser.ui.components
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +48,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Layers
@@ -57,6 +71,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import com.example.videobrowser.ui.glass.GlassBottomSheet
 import com.example.videobrowser.ui.glass.GlassTokens
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.motionTween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +84,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -121,42 +140,49 @@ fun DetectedMediaSheet(
         ) {
 
             if (displayGroups.isEmpty()) {
-                // Empty state
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
+                if (pageUrl.isNotBlank() && pageUrl != "nova://home") {
+                    VideoDetectionSkeleton(
+                        pageTitle = pageTitle.ifBlank { "this webpage" },
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    // Empty state for home or pages without media
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(vertical = 24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "No media detected on this page yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Play a video to begin detection. Background GIFs and audio previews are automatically filtered out.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            lineHeight = 16.sp
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No media detected on this page yet",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Play a video to begin detection. Background GIFs and audio previews are automatically filtered out.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                lineHeight = 16.sp
+                            )
+                        }
                     }
                 }
             } else {
@@ -170,25 +196,19 @@ fun DetectedMediaSheet(
                         GroupedVideoItemCard(
                             group = group,
                             onSelectQuality = { qualityId -> onSelectQuality(group.id, qualityId) },
-                            onDownload = {
-                                val quality = group.selectedQuality
-                                if (quality != null) {
-                                    val media = quality.toDetectedMedia(group.title, group.pageUrl)
-                                    onSelectMedia(media)
-                                }
+                            onDownloadSelected = { selectedQ ->
+                                val media = selectedQ.toDetectedMedia(group.title, group.pageUrl)
+                                onSelectMedia(media)
                             },
-                            onPreview = {
-                                val quality = group.selectedQuality
-                                if (quality != null) {
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                                            setDataAndType(Uri.parse(quality.mediaUrl), quality.mimeType)
-                                        }
-                                        context.startActivity(intent)
-                                    } catch (_: Exception) {
-                                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(quality.mediaUrl))
-                                        context.startActivity(browserIntent)
+                            onPreviewSelected = { selectedQ ->
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(Uri.parse(selectedQ.mediaUrl), selectedQ.mimeType)
                                     }
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(selectedQ.mediaUrl))
+                                    context.startActivity(browserIntent)
                                 }
                             }
                         )
@@ -227,8 +247,8 @@ fun DetectedMediaSheet(
 private fun GroupedVideoItemCard(
     group: GroupedVideoMedia,
     onSelectQuality: (String) -> Unit,
-    onDownload: () -> Unit,
-    onPreview: () -> Unit
+    onDownloadSelected: (VideoQualityOption) -> Unit,
+    onPreviewSelected: (VideoQualityOption) -> Unit
 ) {
     val activeQuality = group.selectedQuality
     val isDownloadable = activeQuality?.isDownloadable ?: group.isDownloadable
@@ -438,69 +458,31 @@ private fun GroupedVideoItemCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Quick Quality Chips Row
+            // Quick Quality Chips Row with entrance and selection animations
             if (group.qualities.isNotEmpty()) {
                 val scrollState = rememberScrollState()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(scrollState),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    group.qualities.forEach { option ->
+                    group.qualities.forEachIndexed { index, option ->
                         val isSelected = option.id == (activeQuality?.id ?: group.qualities.firstOrNull()?.id)
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                            },
-                            border = if (isSelected) {
-                                BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                            } else {
-                                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                            },
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = index * 35)) +
+                                scaleIn(initialScale = 0.88f, animationSpec = tween(durationMillis = 200, delayMillis = index * 35))
+                        ) {
+                            QualityChip(
+                                option = option,
+                                isSelected = isSelected,
+                                onSelect = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onSelectQuality(option.id)
                                 }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                }
-                                Text(
-                                    text = option.resolutionShort,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "•",
-                                    fontSize = 9.sp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = option.displaySize,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            )
                         }
                     }
                 }
@@ -538,22 +520,44 @@ private fun GroupedVideoItemCard(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
 
-                            // Selected Quality Summary
-                            activeQuality?.let { q ->
-                                Text(
-                                    text = "${q.resolutionLabel} • ${q.format} • ${q.displaySize}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            } ?: Text(
-                                text = "Select Quality",
-                                style = MaterialTheme.typography.bodySmall,
+                            // Selected Quality Summary with smooth fluid transitions
+                            AnimatedContent(
+                                targetState = activeQuality,
+                                transitionSpec = {
+                                    (slideInVertically(animationSpec = tween(180)) { height -> height / 3 } + fadeIn(animationSpec = tween(180))) togetherWith
+                                        (slideOutVertically(animationSpec = tween(150)) { height -> -height / 3 } + fadeOut(animationSpec = tween(150)))
+                                },
+                                label = "activeQualityHeaderTransition",
                                 modifier = Modifier.weight(1f)
-                            )
+                            ) { q ->
+                                if (q != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (q.isAudioOnly) {
+                                            Icon(
+                                                imageVector = Icons.Default.Headphones,
+                                                contentDescription = null,
+                                                tint = Color(0xFFA855F7),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        }
+                                        Text(
+                                            text = "${q.resolutionLabel} • ${q.format} • ${q.displaySize}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (q.isAudioOnly) Color(0xFFA855F7) else MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Select Quality",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
 
                             Icon(
                                 imageVector = if (isQualityMenuExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -624,6 +628,9 @@ private fun GroupedVideoItemCard(
                 }
 
                 activeQuality?.let { q ->
+                    if (q.isAudioOnly) {
+                        BadgeChip(label = "Audio Only", color = Color(0xFFF3E8FF), textColor = Color(0xFF7E22CE))
+                    }
                     BadgeChip(label = q.format, color = MaterialTheme.colorScheme.primaryContainer)
                     BadgeChip(label = q.resolutionShort, color = MaterialTheme.colorScheme.secondaryContainer)
                     BadgeChip(label = q.displaySize, color = MaterialTheme.colorScheme.tertiaryContainer)
@@ -665,14 +672,44 @@ private fun GroupedVideoItemCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Buttons (Preview and Download)
+            // Action Buttons (Preview and Download) with animated button state transitions
+            val isReducedMotion = LocalReducedMotion.current
+            val isAudioSelected = activeQuality?.isAudioOnly == true
+
+            val downloadButtonContainerColor by animateColorAsState(
+                targetValue = when {
+                    !isDownloadable -> MaterialTheme.colorScheme.surfaceVariant
+                    isAudioSelected -> Color(0xFF9333EA)
+                    else -> MaterialTheme.colorScheme.primary
+                },
+                animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+                label = "downloadButtonContainerColor"
+            )
+            val downloadButtonContentColor by animateColorAsState(
+                targetValue = when {
+                    !isDownloadable -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    isAudioSelected -> Color.White
+                    else -> MaterialTheme.colorScheme.onPrimary
+                },
+                animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+                label = "downloadButtonContentColor"
+            )
+            val downloadButtonScale by animateFloatAsState(
+                targetValue = if (isDownloadable && !isReducedMotion) 1f else 0.98f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                label = "downloadButtonScale"
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedButton(
-                    onClick = onPreview,
+                    onClick = {
+                        val q = activeQuality ?: group.qualities.firstOrNull()
+                        if (q != null) onPreviewSelected(q)
+                    },
                     modifier = Modifier.height(48.dp)
                 ) {
                     Icon(
@@ -688,58 +725,231 @@ private fun GroupedVideoItemCard(
 
                 Button(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onDownload()
+                        val q = activeQuality ?: group.qualities.firstOrNull()
+                        if (q != null) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onDownloadSelected(q)
+                        }
                     },
                     enabled = isDownloadable,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
+                        containerColor = downloadButtonContainerColor,
+                        contentColor = downloadButtonContentColor,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     ),
                     modifier = Modifier
                         .height(48.dp)
+                        .graphicsLayer {
+                            scaleX = downloadButtonScale
+                            scaleY = downloadButtonScale
+                        }
                         .testTag("select_download_button_${group.id}")
                 ) {
-                    Icon(
-                        imageVector = if (isDownloadable) Icons.Default.Download else Icons.Default.Lock,
-                        contentDescription = "Download video",
-                        modifier = Modifier.size(16.dp)
-                    )
+                    // Animated Icon transition
+                    AnimatedContent(
+                        targetState = Triple(isDownloadable, isAudioSelected, activeQuality?.id),
+                        transitionSpec = {
+                            (scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(140))) togetherWith
+                                (scaleOut() + fadeOut(tween(120)))
+                        },
+                        label = "downloadButtonIconTransition"
+                    ) { (downloadable, isAudio, _) ->
+                        Icon(
+                            imageVector = when {
+                                !downloadable -> Icons.Default.Lock
+                                isAudio -> Icons.Default.Headphones
+                                else -> Icons.Default.Download
+                            },
+                            contentDescription = if (isAudio) "Download audio-only stream" else "Download video",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = when (activeQuality?.category ?: group.category) {
-                            MediaCompatibilityCategory.DIRECT_DOWNLOADABLE -> {
+
+                    // Animated Label transition
+                    val buttonLabel = when (activeQuality?.category ?: group.category) {
+                        MediaCompatibilityCategory.DIRECT_DOWNLOADABLE -> {
+                            val qLabel = activeQuality?.resolutionShort ?: ""
+                            val sLabel = activeQuality?.displaySize ?: ""
+                            when {
+                                isAudioSelected && sLabel.isNotBlank() && sLabel != "Unknown Size" -> "Download Audio ($sLabel)"
+                                isAudioSelected -> "Download Audio"
+                                qLabel.isNotBlank() && sLabel.isNotBlank() && sLabel != "Unknown Size" -> "Download $qLabel ($sLabel)"
+                                qLabel.isNotBlank() -> "Download $qLabel"
+                                else -> "Download"
+                            }
+                        }
+                        MediaCompatibilityCategory.ADAPTIVE_STREAM -> {
+                            if (isDownloadable) {
                                 val qLabel = activeQuality?.resolutionShort ?: ""
                                 val sLabel = activeQuality?.displaySize ?: ""
-                                if (qLabel.isNotBlank() && sLabel.isNotBlank() && sLabel != "Unknown Size") {
+                                if (isAudioSelected) {
+                                    "Download HLS Audio"
+                                } else if (qLabel.isNotBlank() && sLabel.isNotBlank() && sLabel != "Adaptive Stream") {
                                     "Download $qLabel ($sLabel)"
                                 } else if (qLabel.isNotBlank()) {
-                                    "Download $qLabel"
+                                    "Download HLS ($qLabel)"
                                 } else {
-                                    "Download"
+                                    "Download HLS"
                                 }
+                            } else {
+                                "Unsupported Stream"
                             }
-                            MediaCompatibilityCategory.ADAPTIVE_STREAM -> {
-                                if (isDownloadable) {
-                                    val qLabel = activeQuality?.resolutionShort ?: ""
-                                    val sLabel = activeQuality?.displaySize ?: ""
-                                    if (qLabel.isNotBlank() && sLabel.isNotBlank() && sLabel != "Adaptive Stream") {
-                                        "Download $qLabel ($sLabel)"
-                                    } else if (qLabel.isNotBlank()) {
-                                        "Download HLS ($qLabel)"
-                                    } else {
-                                        "Download HLS"
-                                    }
-                                } else {
-                                    "Unsupported Stream"
-                                }
-                            }
-                            MediaCompatibilityCategory.RESTRICTED_OR_PROTECTED -> "Restricted"
+                        }
+                        MediaCompatibilityCategory.RESTRICTED_OR_PROTECTED -> "Restricted"
+                    }
+
+                    AnimatedContent(
+                        targetState = buttonLabel,
+                        transitionSpec = {
+                            (slideInVertically(animationSpec = tween(180)) { height -> height / 2 } + fadeIn(animationSpec = tween(180))) togetherWith
+                                (slideOutVertically(animationSpec = tween(150)) { height -> -height / 2 } + fadeOut(animationSpec = tween(150)))
                         },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                        label = "downloadButtonLabelTransition"
+                    ) { text ->
+                        Text(
+                            text = text,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Animated quality chip with spring selection bounce, adaptive color transitions,
+ * audio-only visual equalizer and animated checkmark indicator.
+ */
+@Composable
+private fun QualityChip(
+    option: VideoQualityOption,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isReducedMotion = LocalReducedMotion.current
+    val isAudio = option.isAudioOnly
+
+    val chipScale by animateFloatAsState(
+        targetValue = if (isSelected && !isReducedMotion) 1.05f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "chipScale_${option.id}"
+    )
+
+    val chipBgColor by animateColorAsState(
+        targetValue = when {
+            isSelected && isAudio -> Color(0xFF9333EA).copy(alpha = 0.24f)
+            isSelected -> MaterialTheme.colorScheme.primaryContainer
+            isAudio -> Color(0xFF9333EA).copy(alpha = 0.08f)
+            else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+        },
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+        label = "chipBgColor_${option.id}"
+    )
+
+    val chipBorderColor by animateColorAsState(
+        targetValue = when {
+            isSelected && isAudio -> Color(0xFFA855F7)
+            isSelected -> MaterialTheme.colorScheme.primary
+            isAudio -> Color(0xFFA855F7).copy(alpha = 0.4f)
+            else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        },
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+        label = "chipBorderColor_${option.id}"
+    )
+
+    val chipBorderWidth by animateDpAsState(
+        targetValue = if (isSelected) 1.5.dp else 1.dp,
+        label = "chipBorderWidth_${option.id}"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = chipBgColor,
+        border = BorderStroke(chipBorderWidth, chipBorderColor),
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = chipScale
+                scaleY = chipScale
+            }
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onSelect)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Animated selection checkmark indicator
+            AnimatedVisibility(
+                visible = isSelected,
+                enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                exit = scaleOut() + fadeOut()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = if (isAudio) Color(0xFFA855F7) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+            }
+
+            // Audio-only distinctive sound wave and headphones icon
+            if (isAudio) {
+                Icon(
+                    imageVector = Icons.Default.Headphones,
+                    contentDescription = "Audio only",
+                    tint = if (isSelected) Color(0xFFA855F7) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                AudioWaveAnimation(
+                    tint = if (isSelected) Color(0xFFA855F7) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    isAnimating = isSelected,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
+
+            Text(
+                text = if (isAudio) "Audio" else option.resolutionShort,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    isSelected && isAudio -> Color(0xFFA855F7)
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    isAudio -> Color(0xFFA855F7).copy(alpha = 0.9f)
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "•",
+                fontSize = 9.sp,
+                color = if (isSelected) {
+                    if (isAudio) Color(0xFFA855F7).copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                } else {
+                    MaterialTheme.colorScheme.outline
+                }
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = option.displaySize,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = if (isSelected) {
+                    if (isAudio) Color(0xFFA855F7).copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
         }
     }
 }
@@ -750,21 +960,72 @@ private fun QualityOptionRow(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val isReducedMotion = LocalReducedMotion.current
+    val isAudio = option.isAudioOnly
+
+    val rowScale by animateFloatAsState(
+        targetValue = if (isSelected && !isReducedMotion) 1.015f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "rowScale_${option.id}"
+    )
+
+    val rowBgColor by animateColorAsState(
+        targetValue = when {
+            isSelected && isAudio -> Color(0xFF9333EA).copy(alpha = 0.2f)
+            isSelected -> MaterialTheme.colorScheme.primaryContainer
+            isAudio -> Color(0xFF9333EA).copy(alpha = 0.05f)
+            else -> Color.Transparent
+        },
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+        label = "rowBgColor_${option.id}"
+    )
+
+    val rowBorderColor by animateColorAsState(
+        targetValue = when {
+            isSelected && isAudio -> Color(0xFFA855F7)
+            isSelected -> MaterialTheme.colorScheme.primary
+            isAudio -> Color(0xFFA855F7).copy(alpha = 0.3f)
+            else -> Color.Transparent
+        },
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
+        label = "rowBorderColor_${option.id}"
+    )
+
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+        color = rowBgColor,
+        border = if (isSelected || isAudio) BorderStroke(if (isSelected) 1.5.dp else 1.dp, rowBorderColor) else null,
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = rowScale
+                scaleY = rowScale
+            }
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Audio-only icon and wave animation
+            if (isAudio) {
+                Icon(
+                    imageVector = Icons.Default.Headphones,
+                    contentDescription = "Audio-only option",
+                    tint = if (isSelected) Color(0xFFA855F7) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                AudioWaveAnimation(
+                    tint = if (isSelected) Color(0xFFA855F7) else Color(0xFFA855F7).copy(alpha = 0.6f),
+                    isAnimating = isSelected,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+
             // Resolution and Format
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -772,17 +1033,23 @@ private fun QualityOptionRow(
                         text = option.resolutionLabel,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        color = when {
+                            isSelected && isAudio -> Color(0xFFA855F7)
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            isAudio -> Color(0xFFA855F7).copy(alpha = 0.9f)
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
+                        color = if (isAudio) Color(0xFF9333EA).copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         Text(
                             text = option.format,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
+                            color = if (isAudio) Color(0xFFA855F7) else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
@@ -805,12 +1072,20 @@ private fun QualityOptionRow(
             // File Size or stream
             Surface(
                 shape = RoundedCornerShape(4.dp),
-                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                color = when {
+                    isSelected && isAudio -> Color(0xFF9333EA).copy(alpha = 0.2f)
+                    isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                }
             ) {
                 Text(
                     text = option.displaySize,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        isSelected && isAudio -> Color(0xFFA855F7)
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
@@ -818,15 +1093,38 @@ private fun QualityOptionRow(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-            } else {
-                Spacer(modifier = Modifier.size(16.dp))
+            // Smooth Animated Selection Indicator
+            AnimatedContent(
+                targetState = isSelected,
+                transitionSpec = {
+                    (scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn()) togetherWith
+                        (scaleOut() + fadeOut())
+                },
+                label = "selectionIndicator_${option.id}"
+            ) { selected ->
+                if (selected) {
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isAudio) Color(0xFFA855F7).copy(alpha = 0.18f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        border = BorderStroke(1.dp, if (isAudio) Color(0xFFA855F7) else MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = if (isAudio) Color(0xFFA855F7) else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape)
+                    )
+                }
             }
         }
     }

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -198,10 +199,13 @@ fun BrowserTopBar(
                 shape = RoundedCornerShape(24.dp),
                 color = containerBgColor
             ) {
-                Row(
-                    modifier = Modifier.padding(start = 12.dp, end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = 12.dp, end = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                     if (isAdBlockerActive) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -373,7 +377,16 @@ fun BrowserTopBar(
                         }
                     }
                 }
+
+                // Smooth Search / Network Loading Beam indicating active query or navigation
+                SearchLoadingBeam(
+                    isLoading = isLoading,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                )
             }
+        }
 
             Spacer(modifier = Modifier.width(4.dp))
 
