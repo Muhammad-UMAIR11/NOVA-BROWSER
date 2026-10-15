@@ -25,6 +25,11 @@ import com.example.videobrowser.model.SearchEngine
 import com.example.videobrowser.model.ThemeMode
 import com.example.videobrowser.model.VideoGroupingEngine
 import com.example.videobrowser.model.VideoQualityOption
+import com.example.videobrowser.model.CustomSearchEngine
+import com.example.videobrowser.model.theme.AnimationIntensity
+import com.example.videobrowser.model.theme.BrowserTheme
+import com.example.videobrowser.model.theme.UiDensity
+import com.example.videobrowser.data.BrowserSettingsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,6 +101,22 @@ data class BrowserUiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val colorTheme: ColorTheme = ColorTheme.OCEAN_BLUE,
     val appFontFamily: AppFontFamily = AppFontFamily.SYSTEM_DEFAULT,
+    val activeBrowserTheme: BrowserTheme = BrowserTheme.MIDNIGHT,
+    val customThemes: List<BrowserTheme> = emptyList(),
+    val allThemes: List<BrowserTheme> = BrowserTheme.BUILT_IN_THEMES,
+    val activeSearchEngine: CustomSearchEngine = CustomSearchEngine.BUILT_IN_ENGINES.first(),
+    val allSearchEngines: List<CustomSearchEngine> = CustomSearchEngine.BUILT_IN_ENGINES,
+    val fontScale: Float = 1.0f,
+    val fontWeightDelta: Int = 0,
+    val applyTextZoomToWeb: Boolean = true,
+    val uiDensity: UiDensity = UiDensity.COMFORTABLE,
+    val cornerRadiusDp: Int = 12,
+    val panelTransparency: Float = 0.88f,
+    val panelBlurIntensity: Float = 0.80f,
+    val animationIntensity: AnimationIntensity = AnimationIntensity.BALANCED,
+    val blockCookies: Boolean = true,
+    val strictPopups: Boolean = true,
+    val hardwareAccel: Boolean = true,
     val selectedMediaForConfirmation: DetectedMedia? = null,
     val customFileNameInput: String = "",
     val useSystemDownloadManager: Boolean = false,
@@ -191,6 +212,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         )
     )
 
+    val settingsManager = BrowserSettingsManager(application)
+
     private val _uiState = MutableStateFlow(
         BrowserUiState(
             tabs = listOf(
@@ -202,7 +225,26 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             isAdBlockerEnabled = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .getBoolean(KEY_AD_BLOCKER_ENABLED, true),
             customWallpaperPath = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getString(KEY_CUSTOM_WALLPAPER, null)?.takeIf { File(it).exists() }
+                .getString(KEY_CUSTOM_WALLPAPER, null)?.takeIf { File(it).exists() },
+            activeBrowserTheme = settingsManager.getActiveTheme(),
+            customThemes = settingsManager.getCustomThemes(),
+            allThemes = settingsManager.getAllThemes(),
+            activeSearchEngine = settingsManager.getActiveEngine(),
+            allSearchEngines = settingsManager.getAllEngines(),
+            searchEngine = SearchEngine.entries.find { it.id == settingsManager.getActiveEngineId() } ?: SearchEngine.DUCKDUCKGO,
+            themeMode = settingsManager.getThemeMode(),
+            appFontFamily = settingsManager.getFontFamily(),
+            fontScale = settingsManager.getFontScale(),
+            fontWeightDelta = settingsManager.getFontWeightDelta(),
+            applyTextZoomToWeb = settingsManager.getApplyTextZoomToWeb(),
+            uiDensity = settingsManager.getUiDensity(),
+            cornerRadiusDp = settingsManager.getCornerRadiusDp(),
+            panelTransparency = settingsManager.getPanelTransparency(),
+            panelBlurIntensity = settingsManager.getPanelBlurIntensity(),
+            animationIntensity = settingsManager.getAnimationIntensity(),
+            blockCookies = settingsManager.getBlockCookies(),
+            strictPopups = settingsManager.getStrictPopups(),
+            hardwareAccel = settingsManager.getHardwareAccel()
         ).let { initial ->
             initial.copy(
                 activeTabId = initial.tabs.first().id,
@@ -229,12 +271,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
-        val searchPrefix = _uiState.value.searchEngine.searchUrlPrefix
         val targetUrl = when {
             URLUtil.isValidUrl(trimmed) -> trimmed
             trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
             trimmed.contains(".") && !trimmed.contains(" ") -> "https://$trimmed"
-            else -> searchPrefix + Uri.encode(trimmed)
+            else -> _uiState.value.activeSearchEngine.buildSearchUrl(trimmed)
         }
 
         loadUrlInActiveTab(targetUrl)
@@ -847,19 +888,281 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     // --- Settings, Customization & Preferences ---
 
     fun setSearchEngine(engine: SearchEngine) {
-        _uiState.update { it.copy(searchEngine = engine, statusNotice = "Search engine: ${engine.displayName}") }
+        settingsManager.setActiveEngineId(engine.id)
+        val customEngine = _uiState.value.allSearchEngines.find { it.id == engine.id }
+            ?: engine.toCustomSearchEngine()
+        _uiState.update {
+            it.copy(
+                searchEngine = engine,
+                activeSearchEngine = customEngine,
+                statusNotice = "Search engine: ${engine.displayName}"
+            )
+        }
+    }
+
+    fun setActiveCustomEngine(engine: CustomSearchEngine) {
+        settingsManager.setActiveEngineId(engine.id)
+        val matchingEnum = SearchEngine.entries.find { it.id == engine.id } ?: _uiState.value.searchEngine
+        _uiState.update {
+            it.copy(
+                activeSearchEngine = engine,
+                searchEngine = matchingEnum,
+                statusNotice = "Search engine: ${engine.displayName}"
+            )
+        }
+    }
+
+    fun saveCustomSearchEngine(engine: CustomSearchEngine) {
+        settingsManager.saveCustomEngine(engine)
+        val all = settingsManager.getAllEngines()
+        _uiState.update {
+            it.copy(
+                allSearchEngines = all,
+                activeSearchEngine = if (it.activeSearchEngine.id == engine.id) engine else it.activeSearchEngine,
+                statusNotice = "Saved search engine: ${engine.displayName}"
+            )
+        }
+    }
+
+    fun deleteCustomSearchEngine(engineId: String) {
+        settingsManager.deleteCustomEngine(engineId)
+        val all = settingsManager.getAllEngines()
+        val active = settingsManager.getActiveEngine()
+        val matchingEnum = SearchEngine.entries.find { it.id == active.id } ?: SearchEngine.DUCKDUCKGO
+        _uiState.update {
+            it.copy(
+                allSearchEngines = all,
+                activeSearchEngine = active,
+                searchEngine = matchingEnum,
+                statusNotice = "Custom search engine deleted"
+            )
+        }
+    }
+
+    fun restoreDefaultSearchEngines() {
+        settingsManager.restoreDefaultEngines()
+        val all = settingsManager.getAllEngines()
+        val active = settingsManager.getActiveEngine()
+        _uiState.update {
+            it.copy(
+                allSearchEngines = all,
+                activeSearchEngine = active,
+                searchEngine = SearchEngine.DUCKDUCKGO,
+                statusNotice = "Search engines restored to defaults"
+            )
+        }
+    }
+
+    fun setBrowserTheme(theme: BrowserTheme) {
+        settingsManager.setActiveThemeId(theme.id)
+        _uiState.update {
+            it.copy(
+                activeBrowserTheme = theme,
+                statusNotice = "Theme: ${theme.name}"
+            )
+        }
+    }
+
+    fun saveCustomTheme(theme: BrowserTheme) {
+        settingsManager.saveCustomTheme(theme)
+        val all = settingsManager.getAllThemes()
+        val custom = settingsManager.getCustomThemes()
+        _uiState.update {
+            it.copy(
+                allThemes = all,
+                customThemes = custom,
+                activeBrowserTheme = theme,
+                statusNotice = "Theme saved: ${theme.name}"
+            )
+        }
+    }
+
+    fun deleteCustomTheme(themeId: String) {
+        settingsManager.deleteCustomTheme(themeId)
+        val all = settingsManager.getAllThemes()
+        val custom = settingsManager.getCustomThemes()
+        val active = settingsManager.getActiveTheme()
+        _uiState.update {
+            it.copy(
+                allThemes = all,
+                customThemes = custom,
+                activeBrowserTheme = active,
+                statusNotice = "Custom theme removed"
+            )
+        }
+    }
+
+    fun importThemesJson(jsonStr: String): Boolean {
+        val success = settingsManager.importThemesJson(jsonStr)
+        if (success) {
+            val all = settingsManager.getAllThemes()
+            val custom = settingsManager.getCustomThemes()
+            _uiState.update {
+                it.copy(
+                    allThemes = all,
+                    customThemes = custom,
+                    statusNotice = "Theme(s) imported successfully"
+                )
+            }
+        }
+        return success
+    }
+
+    fun exportThemesJson(): String {
+        return settingsManager.exportThemesJson()
     }
 
     fun setThemeMode(mode: ThemeMode) {
-        _uiState.update { it.copy(themeMode = mode, statusNotice = "Theme: ${mode.displayName}") }
+        settingsManager.setThemeMode(mode)
+        _uiState.update { it.copy(themeMode = mode, statusNotice = "Appearance: ${mode.displayName}") }
     }
 
     fun setColorTheme(colorTheme: ColorTheme) {
-        _uiState.update { it.copy(colorTheme = colorTheme, statusNotice = "Accent: ${colorTheme.displayName}") }
+        // Map to corresponding BrowserTheme for unified experience
+        val mappedTheme = when (colorTheme) {
+            ColorTheme.OCEAN_BLUE -> BrowserTheme.MIDNIGHT
+            ColorTheme.EMERALD -> BrowserTheme.EMERALD
+            ColorTheme.DEEP_PURPLE -> BrowserTheme.AURORA
+            ColorTheme.SUNSET_AMBER -> BrowserTheme.SOLAR
+            ColorTheme.CRIMSON_RED -> BrowserTheme.CYBERPUNK
+        }
+        settingsManager.setActiveThemeId(mappedTheme.id)
+        _uiState.update {
+            it.copy(
+                colorTheme = colorTheme,
+                activeBrowserTheme = mappedTheme,
+                statusNotice = "Accent: ${colorTheme.displayName}"
+            )
+        }
     }
 
     fun setFontFamily(fontFamily: AppFontFamily) {
+        settingsManager.setFontFamily(fontFamily)
         _uiState.update { it.copy(appFontFamily = fontFamily, statusNotice = "Font: ${fontFamily.displayName}") }
+    }
+
+    fun setFontScale(scale: Float) {
+        settingsManager.setFontScale(scale)
+        _uiState.update { it.copy(fontScale = scale) }
+    }
+
+    fun setFontWeightDelta(delta: Int) {
+        settingsManager.setFontWeightDelta(delta)
+        _uiState.update { it.copy(fontWeightDelta = delta) }
+    }
+
+    fun setApplyTextZoomToWeb(enabled: Boolean) {
+        settingsManager.setApplyTextZoomToWeb(enabled)
+        _uiState.update { it.copy(applyTextZoomToWeb = enabled) }
+    }
+
+    fun setUiDensity(density: UiDensity) {
+        settingsManager.setUiDensity(density)
+        _uiState.update { it.copy(uiDensity = density, statusNotice = "Layout density: ${density.displayName}") }
+    }
+
+    fun setCornerRadius(radiusDp: Int) {
+        settingsManager.setCornerRadiusDp(radiusDp)
+        _uiState.update { it.copy(cornerRadiusDp = radiusDp) }
+    }
+
+    fun setPanelTransparency(alpha: Float) {
+        settingsManager.setPanelTransparency(alpha)
+        _uiState.update { it.copy(panelTransparency = alpha) }
+    }
+
+    fun setPanelBlurIntensity(blur: Float) {
+        settingsManager.setPanelBlurIntensity(blur)
+        _uiState.update { it.copy(panelBlurIntensity = blur) }
+    }
+
+    fun setAnimationIntensity(intensity: AnimationIntensity) {
+        settingsManager.setAnimationIntensity(intensity)
+        _uiState.update { it.copy(animationIntensity = intensity, statusNotice = "Motion: ${intensity.displayName}") }
+    }
+
+    fun setBlockCookies(enabled: Boolean) {
+        settingsManager.setBlockCookies(enabled)
+        _uiState.update { it.copy(blockCookies = enabled) }
+    }
+
+    fun setStrictPopups(enabled: Boolean) {
+        settingsManager.setStrictPopups(enabled)
+        _uiState.update { it.copy(strictPopups = enabled) }
+    }
+
+    fun setHardwareAccel(enabled: Boolean) {
+        settingsManager.setHardwareAccel(enabled)
+        _uiState.update { it.copy(hardwareAccel = enabled) }
+    }
+
+    fun resetThemeAndColors() {
+        settingsManager.resetColorsAndThemes()
+        _uiState.update {
+            it.copy(
+                activeBrowserTheme = BrowserTheme.MIDNIGHT,
+                customThemes = emptyList(),
+                allThemes = BrowserTheme.BUILT_IN_THEMES,
+                colorTheme = ColorTheme.OCEAN_BLUE,
+                statusNotice = "Theme & colors reset to defaults"
+            )
+        }
+    }
+
+    fun resetTypography() {
+        settingsManager.resetTypography()
+        _uiState.update {
+            it.copy(
+                appFontFamily = AppFontFamily.SYSTEM_DEFAULT,
+                fontScale = 1.0f,
+                fontWeightDelta = 0,
+                applyTextZoomToWeb = true,
+                statusNotice = "Typography reset to default"
+            )
+        }
+    }
+
+    fun resetAdvancedSettings() {
+        settingsManager.resetAdvanced()
+        _uiState.update {
+            it.copy(
+                uiDensity = UiDensity.COMFORTABLE,
+                cornerRadiusDp = 12,
+                panelTransparency = 0.88f,
+                panelBlurIntensity = 0.80f,
+                animationIntensity = AnimationIntensity.BALANCED,
+                statusNotice = "Advanced appearance reset to default"
+            )
+        }
+    }
+
+    fun performFullFactoryReset() {
+        settingsManager.fullFactoryReset()
+        _uiState.update {
+            it.copy(
+                activeBrowserTheme = BrowserTheme.MIDNIGHT,
+                customThemes = emptyList(),
+                allThemes = BrowserTheme.BUILT_IN_THEMES,
+                activeSearchEngine = CustomSearchEngine.BUILT_IN_ENGINES.first(),
+                allSearchEngines = CustomSearchEngine.BUILT_IN_ENGINES,
+                searchEngine = SearchEngine.DUCKDUCKGO,
+                themeMode = ThemeMode.SYSTEM,
+                colorTheme = ColorTheme.OCEAN_BLUE,
+                appFontFamily = AppFontFamily.SYSTEM_DEFAULT,
+                fontScale = 1.0f,
+                fontWeightDelta = 0,
+                applyTextZoomToWeb = true,
+                uiDensity = UiDensity.COMFORTABLE,
+                cornerRadiusDp = 12,
+                panelTransparency = 0.88f,
+                panelBlurIntensity = 0.80f,
+                animationIntensity = AnimationIntensity.BALANCED,
+                blockCookies = true,
+                strictPopups = true,
+                hardwareAccel = true,
+                statusNotice = "All settings reset to factory defaults"
+            )
+        }
     }
 
     fun openSettingsSheet() {

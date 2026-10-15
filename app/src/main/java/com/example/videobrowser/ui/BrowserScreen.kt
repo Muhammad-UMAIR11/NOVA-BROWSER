@@ -11,12 +11,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -200,8 +205,45 @@ fun BrowserScreen(
         }
     }
 
+    // Fast, minimal professional startup transition that smoothly reveals the existing browser interface
+    var isStartupRevealed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isStartupRevealed = true
+    }
+
+    val startupAlpha by animateFloatAsState(
+        targetValue = if (isStartupRevealed || isReducedMotion) 1f else 0f,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "startupAlpha"
+    )
+
+    val startupScale by animateFloatAsState(
+        targetValue = if (isStartupRevealed || isReducedMotion) 1f else 0.985f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "startupScale"
+    )
+
+    val startupTranslationY by animateFloatAsState(
+        targetValue = if (isStartupRevealed || isReducedMotion) 0f else 6f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "startupTranslationY"
+    )
+
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                alpha = startupAlpha
+                scaleX = startupScale
+                scaleY = startupScale
+                translationY = startupTranslationY
+            },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AnimatedVisibility(
@@ -424,6 +466,7 @@ fun BrowserScreen(
     )
 
     BrowserSettingsSheet(
+        viewModel = viewModel,
         visible = uiState.showSettingsSheet,
         currentSearchEngine = uiState.searchEngine,
         currentThemeMode = uiState.themeMode,

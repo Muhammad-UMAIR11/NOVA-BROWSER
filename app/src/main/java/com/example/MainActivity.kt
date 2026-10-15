@@ -29,7 +29,14 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme(
                 themeMode = uiState.themeMode,
                 colorTheme = uiState.colorTheme,
-                fontFamilyChoice = uiState.appFontFamily
+                activeBrowserTheme = uiState.activeBrowserTheme,
+                fontFamilyChoice = uiState.appFontFamily,
+                fontScale = uiState.fontScale,
+                fontWeightDelta = uiState.fontWeightDelta,
+                uiDensity = uiState.uiDensity,
+                cornerRadiusDp = uiState.cornerRadiusDp,
+                panelTransparency = uiState.panelTransparency,
+                animationIntensity = uiState.animationIntensity
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

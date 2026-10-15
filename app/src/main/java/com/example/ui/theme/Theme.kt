@@ -10,96 +10,81 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.example.videobrowser.model.AppFontFamily
 import com.example.videobrowser.model.ColorTheme
 import com.example.videobrowser.model.ThemeMode
+import com.example.videobrowser.model.theme.AnimationIntensity
+import com.example.videobrowser.model.theme.BrowserTheme
+import com.example.videobrowser.model.theme.UiDensity
 import com.example.videobrowser.ui.motion.LocalMotionScheme
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionScheme
 import com.example.videobrowser.ui.motion.rememberReducedMotion
 
-private fun createCustomColorScheme(colorTheme: ColorTheme, isDark: Boolean): ColorScheme {
-    val primary = Color(colorTheme.primaryColor)
-    val secondary = Color(colorTheme.secondaryColor)
+val LocalBrowserCustomTheme = compositionLocalOf { BrowserTheme.MIDNIGHT }
+val LocalBrowserUiDensity = compositionLocalOf { UiDensity.COMFORTABLE }
+val LocalBrowserCornerRadius = compositionLocalOf { 12.dp }
+val LocalBrowserPanelTransparency = compositionLocalOf { 0.88f }
 
-    // App's default accent is Ocean Blue (0xFF0061A4), with light blue surface (0xFFD1E4FF)
-    val lightPrimaryContainer = when (colorTheme) {
-        ColorTheme.OCEAN_BLUE -> Color(0xFFD1E4FF) // Crisp light blue surface
-        ColorTheme.EMERALD -> Color(0xFFCEEAD6)
-        ColorTheme.DEEP_PURPLE -> Color(0xFFEADDFF)
-        ColorTheme.SUNSET_AMBER -> Color(0xFFFFE0B2)
-        ColorTheme.CRIMSON_RED -> Color(0xFFFFDAD6)
-    }
-    val lightOnPrimaryContainer = when (colorTheme) {
-        ColorTheme.OCEAN_BLUE -> Color(0xFF001D36) // Deep primary blue accent
-        ColorTheme.EMERALD -> Color(0xFF002114)
-        ColorTheme.DEEP_PURPLE -> Color(0xFF21005D)
-        ColorTheme.SUNSET_AMBER -> Color(0xFF2C1600)
-        ColorTheme.CRIMSON_RED -> Color(0xFF410002)
-    }
+/**
+ * Creates Material3 ColorScheme seamlessly mapped from any BrowserTheme.
+ */
+fun createColorSchemeFromBrowserTheme(theme: BrowserTheme): ColorScheme {
+    val primary = Color(theme.primaryColor)
+    val onPrimary = Color(theme.onPrimaryColor)
+    val secondary = Color(theme.secondaryColor)
+    val surface = Color(theme.surfaceColor)
+    val onSurface = Color(theme.onSurfaceColor)
+    val background = Color(theme.backgroundColor)
+    val onBackground = Color(theme.onBackgroundColor)
+    val border = Color(theme.borderColor)
 
-    val darkPrimaryContainer = when (colorTheme) {
-        ColorTheme.OCEAN_BLUE -> Color(0xFF00497D) // Deep oceanic blue accent surface
-        ColorTheme.EMERALD -> Color(0xFF005238)
-        ColorTheme.DEEP_PURPLE -> Color(0xFF4F378B)
-        ColorTheme.SUNSET_AMBER -> Color(0xFF653800)
-        ColorTheme.CRIMSON_RED -> Color(0xFF93000A)
-    }
-    val darkOnPrimaryContainer = when (colorTheme) {
-        ColorTheme.OCEAN_BLUE -> Color(0xFFD1E4FF) // Bright primary light blue accent
-        ColorTheme.EMERALD -> Color(0xFF8CF8C2)
-        ColorTheme.DEEP_PURPLE -> Color(0xFFEADDFF)
-        ColorTheme.SUNSET_AMBER -> Color(0xFFFFDCBE)
-        ColorTheme.CRIMSON_RED -> Color(0xFFFFDAD6)
-    }
-
-    return if (isDark) {
+    return if (theme.isDark) {
         darkColorScheme(
             primary = primary,
+            onPrimary = onPrimary,
+            primaryContainer = primary.copy(alpha = 0.28f),
+            onPrimaryContainer = primary,
             secondary = secondary,
-            primaryContainer = darkPrimaryContainer,
-            onPrimaryContainer = darkOnPrimaryContainer,
-            secondaryContainer = Color(0xFF1E293B),
-            onSecondaryContainer = Color(0xFFE2E8F0),
-            surface = Color(0xFF0F172A),
-            background = Color(0xFF020617),
-            surfaceVariant = Color(0xFF1E293B),
-            onPrimary = Color.White,
             onSecondary = Color.White,
-            onSurface = Color(0xFFF8FAFC),
-            onBackground = Color(0xFFF8FAFC),
-            onSurfaceVariant = Color(0xFF94A3B8),
-            outline = Color(0xFF64748B),
-            outlineVariant = Color(0xFF334155),
+            secondaryContainer = surface.copy(alpha = 0.7f),
+            onSecondaryContainer = onSurface,
+            surface = surface,
+            onSurface = onSurface,
+            background = background,
+            onBackground = onBackground,
+            surfaceVariant = Color(theme.toolbarColor),
+            onSurfaceVariant = Color(theme.secondaryTextColor),
+            outline = border,
+            outlineVariant = border.copy(alpha = 0.6f),
             error = Color(0xFFFFB4AB),
-            errorContainer = Color(0xFF93000A),
-            onError = Color(0xFF690005),
-            onErrorContainer = Color(0xFFFFDAD6)
+            onError = Color(0xFF690005)
         )
     } else {
         lightColorScheme(
             primary = primary,
+            onPrimary = onPrimary,
+            primaryContainer = primary.copy(alpha = 0.16f),
+            onPrimaryContainer = primary,
             secondary = secondary,
-            primaryContainer = lightPrimaryContainer,
-            onPrimaryContainer = lightOnPrimaryContainer,
-            secondaryContainer = Color(0xFFE2E8F0),
-            onSecondaryContainer = Color(0xFF1E293B),
-            surface = Color(0xFFF8FAFC),
-            background = Color(0xFFF1F5F9),
-            surfaceVariant = Color(0xFFE2E8F0),
-            onPrimary = Color.White,
             onSecondary = Color.White,
-            onSurface = Color(0xFF0F172A),
-            onBackground = Color(0xFF0F172A),
-            onSurfaceVariant = Color(0xFF475569),
-            outline = Color(0xFF94A3B8),
-            outlineVariant = Color(0xFFCBD5E1),
+            secondaryContainer = surface.copy(alpha = 0.9f),
+            onSecondaryContainer = onSurface,
+            surface = surface,
+            onSurface = onSurface,
+            background = background,
+            onBackground = onBackground,
+            surfaceVariant = Color(theme.toolbarColor),
+            onSurfaceVariant = Color(theme.secondaryTextColor),
+            outline = border,
+            outlineVariant = border.copy(alpha = 0.6f),
             error = Color(0xFFBA1A1A),
-            errorContainer = Color(0xFFFFDAD6),
-            onError = Color.White,
-            onErrorContainer = Color(0xFF410002)
+            onError = Color.White
         )
     }
 }
@@ -108,7 +93,14 @@ private fun createCustomColorScheme(colorTheme: ColorTheme, isDark: Boolean): Co
 fun MyApplicationTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     colorTheme: ColorTheme = ColorTheme.OCEAN_BLUE,
+    activeBrowserTheme: BrowserTheme = BrowserTheme.MIDNIGHT,
     fontFamilyChoice: AppFontFamily = AppFontFamily.SYSTEM_DEFAULT,
+    fontScale: Float = 1.0f,
+    fontWeightDelta: Int = 0,
+    uiDensity: UiDensity = UiDensity.COMFORTABLE,
+    cornerRadiusDp: Int = 12,
+    panelTransparency: Float = 0.88f,
+    animationIntensity: AnimationIntensity = AnimationIntensity.BALANCED,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -119,18 +111,37 @@ fun MyApplicationTheme(
         ThemeMode.DARK -> true
     }
 
+    // Determine target theme (if user chose Bright/Dark override, align theme lightness)
+    val effectiveTheme = if (themeMode == ThemeMode.BRIGHT && activeBrowserTheme.isDark) {
+        BrowserTheme.ARCTIC
+    } else if (themeMode == ThemeMode.DARK && !activeBrowserTheme.isDark) {
+        BrowserTheme.MIDNIGHT
+    } else {
+        activeBrowserTheme
+    }
+
     val context = LocalContext.current
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        else -> createCustomColorScheme(colorTheme, isDark)
+        else -> createColorSchemeFromBrowserTheme(effectiveTheme)
     }
 
-    val typography = createAppTypography(getComposeFontFamily(fontFamilyChoice))
-    val isReducedMotion = rememberReducedMotion()
+    val typography = createAppTypography(
+        fontFamily = getComposeFontFamily(fontFamilyChoice),
+        scaleFactor = fontScale,
+        weightOffset = fontWeightDelta
+    )
+
+    val systemReducedMotion = rememberReducedMotion()
+    val isReducedMotion = systemReducedMotion || (animationIntensity == AnimationIntensity.REDUCED)
 
     CompositionLocalProvider(
+        LocalBrowserCustomTheme provides effectiveTheme,
+        LocalBrowserUiDensity provides uiDensity,
+        LocalBrowserCornerRadius provides cornerRadiusDp.dp,
+        LocalBrowserPanelTransparency provides panelTransparency,
         LocalReducedMotion provides isReducedMotion,
         LocalMotionScheme provides MotionScheme.Default
     ) {

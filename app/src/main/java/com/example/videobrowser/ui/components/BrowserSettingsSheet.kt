@@ -10,7 +10,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -27,7 +26,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,7 +33,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -46,32 +43,36 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -80,87 +81,97 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.theme.getComposeFontFamily
 import com.example.videobrowser.model.AppFontFamily
 import com.example.videobrowser.model.ColorTheme
+import com.example.videobrowser.model.CustomSearchEngine
 import com.example.videobrowser.model.SearchEngine
 import com.example.videobrowser.model.ThemeMode
+import com.example.videobrowser.model.theme.AnimationIntensity
+import com.example.videobrowser.model.theme.BrowserTheme
+import com.example.videobrowser.model.theme.CornerRadiusOption
+import com.example.videobrowser.model.theme.UiDensity
+import com.example.videobrowser.ui.components.settings.AddSearchEngineDialog
+import com.example.videobrowser.ui.components.settings.ColorPickerDialog
+import com.example.videobrowser.ui.components.settings.CreateThemeDialog
+import com.example.videobrowser.ui.components.settings.ThemeJsonDialog
 import com.example.videobrowser.ui.glass.GlassBottomSheet
-import com.example.videobrowser.ui.glass.GlassTokens
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionDurations
 import com.example.videobrowser.ui.motion.motionTween
+import com.example.videobrowser.viewmodel.BrowserViewModel
 import kotlin.math.roundToInt
+
+private enum class SettingsCategory(val title: String, val icon: ImageVector) {
+    THEMES("Themes", Icons.Default.Palette),
+    TYPOGRAPHY("Typography", Icons.Default.FontDownload),
+    SEARCH("Search", Icons.Default.Search),
+    APPEARANCE("Appearance", Icons.Default.Tune),
+    PRIVACY("Privacy & Disk", Icons.Default.Security)
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BrowserSettingsSheet(
+    viewModel: BrowserViewModel? = null,
     sheetState: SheetState? = null,
-    currentSearchEngine: SearchEngine,
-    currentThemeMode: ThemeMode,
-    currentColorTheme: ColorTheme,
-    currentFontFamily: AppFontFamily,
+    currentSearchEngine: SearchEngine = SearchEngine.DUCKDUCKGO,
+    currentThemeMode: ThemeMode = ThemeMode.SYSTEM,
+    currentColorTheme: ColorTheme = ColorTheme.OCEAN_BLUE,
+    currentFontFamily: AppFontFamily = AppFontFamily.SYSTEM_DEFAULT,
     customWallpaperPath: String? = null,
     isAdBlockerActive: Boolean = true,
-    onSelectSearchEngine: (SearchEngine) -> Unit,
-    onSelectThemeMode: (ThemeMode) -> Unit,
-    onSelectColorTheme: (ColorTheme) -> Unit,
-    onSelectFontFamily: (AppFontFamily) -> Unit,
+    onSelectSearchEngine: (SearchEngine) -> Unit = {},
+    onSelectThemeMode: (ThemeMode) -> Unit = {},
+    onSelectColorTheme: (ColorTheme) -> Unit = {},
+    onSelectFontFamily: (AppFontFamily) -> Unit = {},
     onUploadWallpaper: (Uri) -> Unit = {},
     onRemoveWallpaper: () -> Unit = {},
-    onClearCache: () -> Unit,
+    onClearCache: () -> Unit = {},
     onToggleAdBlocker: () -> Unit = {},
     onDismiss: () -> Unit,
     visible: Boolean = true
 ) {
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            onUploadWallpaper(uri)
-        }
-    }
-
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            onUploadWallpaper(uri)
-        }
-    }
-
-    val isReducedMotion = LocalReducedMotion.current
     val haptic = LocalHapticFeedback.current
+    val isReducedMotion = LocalReducedMotion.current
 
-    // Animated Save/Apply feedback pill
+    // Observe rich ViewModel state if connected
+    val uiState = viewModel?.uiState?.collectAsStateWithLifecycle()?.value
+
+    var selectedTab by remember { mutableStateOf(SettingsCategory.THEMES) }
+
+    // Live feedback pill
     var appliedNoticeText by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(appliedNoticeText) {
         if (appliedNoticeText != null) {
@@ -169,43 +180,82 @@ fun BrowserSettingsSheet(
         }
     }
 
-    // Interactive Dropdowns states
-    var isSearchEngineExpanded by remember { mutableStateOf(true) }
-    var isFontDropdownExpanded by remember { mutableStateOf(true) }
+    // Dialog controllers
+    var showCreateThemeDialog by remember { mutableStateOf(false) }
+    var editingSearchEngine by remember { mutableStateOf<CustomSearchEngine?>(null) }
+    var showAddSearchEngineDialog by remember { mutableStateOf(false) }
+    var showExportThemesDialog by remember { mutableStateOf(false) }
+    var showImportThemesDialog by remember { mutableStateOf(false) }
+    var activeColorPickerKey by remember { mutableStateOf<String?>(null) }
+    var showFactoryResetDialog by remember { mutableStateOf(false) }
 
-    // Interactive Checkboxes states
-    var blockTrackingCookies by remember { mutableStateOf(true) }
-    var strictPopupPrevention by remember { mutableStateOf(true) }
-    var hardwareAcceleration by remember { mutableStateOf(true) }
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onUploadWallpaper(uri)
+            appliedNoticeText = "Custom photo wallpaper applied"
+        }
+    }
 
-    // Interactive Slider state (Page Text Zoom & Scale)
-    var textScalePercent by remember { mutableFloatStateOf(100f) }
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onUploadWallpaper(uri)
+            appliedNoticeText = "Custom wallpaper image set"
+        }
+    }
+
+    val activeTheme = uiState?.activeBrowserTheme ?: BrowserTheme.MIDNIGHT
+    val allThemes = uiState?.allThemes ?: BrowserTheme.BUILT_IN_THEMES
+    val customThemes = uiState?.customThemes ?: emptyList()
+
+    val activeEngine = uiState?.activeSearchEngine ?: CustomSearchEngine.BUILT_IN_ENGINES.first()
+    val allEngines = uiState?.allSearchEngines ?: CustomSearchEngine.BUILT_IN_ENGINES
+
+    val currentFont = uiState?.appFontFamily ?: currentFontFamily
+    val fontScale = uiState?.fontScale ?: 1.0f
+    val fontWeightDelta = uiState?.fontWeightDelta ?: 0
+    val applyTextZoomToWeb = uiState?.applyTextZoomToWeb ?: true
+
+    val uiDensity = uiState?.uiDensity ?: UiDensity.COMFORTABLE
+    val cornerRadiusDp = uiState?.cornerRadiusDp ?: 12
+    val panelTransparency = uiState?.panelTransparency ?: 0.88f
+    val panelBlur = uiState?.panelBlurIntensity ?: 0.80f
+    val animationIntensity = uiState?.animationIntensity ?: AnimationIntensity.BALANCED
+    val themeMode = uiState?.themeMode ?: currentThemeMode
+
+    val blockCookies = uiState?.blockCookies ?: true
+    val strictPopups = uiState?.strictPopups ?: true
+    val hardwareAccel = uiState?.hardwareAccel ?: true
+    val adBlockerActive = uiState?.isAdBlockerEnabled ?: isAdBlockerActive
 
     GlassBottomSheet(
         visible = visible,
         onDismiss = onDismiss,
-        title = "Nova Settings",
-        subtitle = "Engines, themes, wallpapers & security",
+        title = "Nova Customization Center",
+        subtitle = "Themes, Typography, Search & Appearance",
         icon = Icons.Default.Palette,
         testTag = "settings_bottom_sheet"
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 4.dp)
         ) {
-            // Live Floating Save/Apply Feedback Banner
+            // Live Floating Notification Banner
             AnimatedVisibility(
                 visible = appliedNoticeText != null,
                 enter = fadeIn(tween(160)) + slideInVertically(tween(180)) { -it / 2 },
                 exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { -it / 2 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp)
+                    .padding(bottom = 6.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF064E3B).copy(alpha = 0.92f),
+                    color = Color(0xFF064E3B).copy(alpha = 0.95f),
                     border = BorderStroke(1.2.dp, Color(0xFF10B981)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -231,1003 +281,1603 @@ fun BrowserSettingsSheet(
                 }
             }
 
-            // 1. Search Engine Section with Animated Dropdown
-            AnimatedSettingsSection(index = 0) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                isSearchEngineExpanded = !isSearchEngineExpanded
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "Default Search Engine",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Current: ${currentSearchEngine.displayName}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 11.5.sp
-                                )
-                            }
-                        }
-
-                        val chevronRotation by animateFloatAsState(
-                            targetValue = if (isSearchEngineExpanded) 180f else 0f,
-                            animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-                            label = "searchChevronRotation"
-                        )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isSearchEngineExpanded) "Collapse search engines" else "Expand search engines",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .rotate(chevronRotation)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    AnimatedVisibility(
-                        visible = isSearchEngineExpanded,
-                        enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                        exit = fadeOut(tween(120)) + shrinkVertically(tween(160))
-                    ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                        ) {
-                            SearchEngine.entries.forEach { engine ->
-                                val isSelected = engine == currentSearchEngine
-                                val itemBg by animateColorAsState(
-                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                    animationSpec = tween(200, easing = FastOutSlowInEasing),
-                                    label = "searchEngineBg_${engine.id}"
-                                )
-                                val itemBorderColor by animateColorAsState(
-                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                    animationSpec = tween(200),
-                                    label = "searchEngineBorder_${engine.id}"
-                                )
-                                val itemScale by animateFloatAsState(
-                                    targetValue = if (isSelected && !isReducedMotion) 1.012f else 1.0f,
-                                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                    label = "searchEngineScale_${engine.id}"
-                                )
-
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .graphicsLayer {
-                                            scaleX = itemScale
-                                            scaleY = itemScale
-                                        }
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .border(1.5.dp, itemBorderColor, RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onSelectSearchEngine(engine)
-                                            appliedNoticeText = "Saved: ${engine.displayName} as default engine"
-                                        }
-                                        .testTag("search_engine_${engine.id}"),
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = itemBg
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = engine.displayName,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = engine.hint,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        AnimatedVisibility(
-                                            visible = isSelected,
-                                            enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(140)),
-                                            exit = scaleOut(tween(100)) + fadeOut(tween(100))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = "Selected",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 2. Custom Theme & Wallpaper (Android Files & Photos)
-            AnimatedSettingsSection(index = 1) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Wallpaper,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Custom Theme & Wallpaper",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Upload custom wallpaper from your Android device photos or files",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .testTag("settings_pick_theme_photo")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AddPhotoAlternate,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Photos", fontSize = 13.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                filePickerLauncher.launch("image/*")
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .testTag("settings_pick_theme_file")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Image,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Files", fontSize = 13.sp)
-                        }
-                    }
-
-                    if (customWallpaperPath != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onRemoveWallpaper()
-                                appliedNoticeText = "Wallpaper reset to default"
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp)
-                                .testTag("settings_reset_wallpaper")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reset Wallpaper", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 3. Theme Mode Section (Dark to Bright) with micro-bounce
-            AnimatedSettingsSection(index = 2) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.SettingsBrightness,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Theme (Dark to Bright)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Switch between bright daylight theme and dark eye-comfort theme",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ThemeMode.entries.forEach { mode ->
-                            val isSelected = mode == currentThemeMode
-                            val icon = when (mode) {
-                                ThemeMode.BRIGHT -> Icons.Default.LightMode
-                                ThemeMode.DARK -> Icons.Default.DarkMode
-                                ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
-                            }
-
-                            val themeBg by animateColorAsState(
-                                targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                animationSpec = tween(200, easing = FastOutSlowInEasing),
-                                label = "themeModeBg_${mode.name}"
-                            )
-                            val themeBorderColor by animateColorAsState(
-                                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                animationSpec = tween(200),
-                                label = "themeModeBorder_${mode.name}"
-                            )
-                            val cardScale by animateFloatAsState(
-                                targetValue = if (isSelected && !isReducedMotion) 1.03f else 1.0f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                label = "themeModeScale_${mode.name}"
-                            )
-
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .graphicsLayer {
-                                        scaleX = cardScale
-                                        scaleY = cardScale
-                                    }
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(1.5.dp, themeBorderColor, RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onSelectThemeMode(mode)
-                                        appliedNoticeText = "Applied: ${mode.displayName}"
-                                    }
-                                    .testTag("theme_mode_${mode.name.lowercase()}"),
-                                shape = RoundedCornerShape(12.dp),
-                                color = themeBg
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = mode.displayName,
-                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = when (mode) {
-                                            ThemeMode.BRIGHT -> "Bright"
-                                            ThemeMode.DARK -> "Dark"
-                                            ThemeMode.SYSTEM -> "System"
-                                        },
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 4. Color Accent Palette with Animated Filter Chips
-            AnimatedSettingsSection(index = 3) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Color Accent",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ColorTheme.entries.forEach { theme ->
-                            val isSelected = theme == currentColorTheme
-                            val chipScale by animateFloatAsState(
-                                targetValue = if (isSelected && !isReducedMotion) 1.05f else 1.0f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                label = "chipScale_${theme.name}"
-                            )
-
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onSelectColorTheme(theme)
-                                    appliedNoticeText = "Accent applied: ${theme.displayName}"
-                                },
-                                label = { Text(theme.displayName, fontSize = 12.sp) },
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(theme.primaryColor))
-                                            .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary
-                                ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    enabled = true,
-                                    selected = isSelected,
-                                    borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    selectedBorderColor = MaterialTheme.colorScheme.primary,
-                                    borderWidth = 1.dp,
-                                    selectedBorderWidth = 1.5.dp
-                                ),
-                                modifier = Modifier
-                                    .graphicsLayer {
-                                        scaleX = chipScale
-                                        scaleY = chipScale
-                                    }
-                                    .testTag("color_theme_${theme.name.lowercase()}")
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 5. Changeable Fonts Section with Animated Dropdown
-            AnimatedSettingsSection(index = 4) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                isFontDropdownExpanded = !isFontDropdownExpanded
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.FontDownload,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "Changeable Fonts",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Current: ${currentFontFamily.displayName}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 11.5.sp
-                                )
-                            }
-                        }
-
-                        val fontChevronRotation by animateFloatAsState(
-                            targetValue = if (isFontDropdownExpanded) 180f else 0f,
-                            animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-                            label = "fontChevronRotation"
-                        )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isFontDropdownExpanded) "Collapse font choices" else "Expand font choices",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .rotate(fontChevronRotation)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    AnimatedVisibility(
-                        visible = isFontDropdownExpanded,
-                        enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                        exit = fadeOut(tween(120)) + shrinkVertically(tween(160))
-                    ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                        ) {
-                            AppFontFamily.entries.forEach { fontOption ->
-                                val isSelected = fontOption == currentFontFamily
-                                val composeFamily = getComposeFontFamily(fontOption)
-
-                                val fontBg by animateColorAsState(
-                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                    animationSpec = tween(200, easing = FastOutSlowInEasing),
-                                    label = "fontFamilyBg_${fontOption.name}"
-                                )
-                                val fontBorderColor by animateColorAsState(
-                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                    animationSpec = tween(200),
-                                    label = "fontFamilyBorder_${fontOption.name}"
-                                )
-                                val fontScale by animateFloatAsState(
-                                    targetValue = if (isSelected && !isReducedMotion) 1.012f else 1.0f,
-                                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                    label = "fontFamilyScale_${fontOption.name}"
-                                )
-
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .graphicsLayer {
-                                            scaleX = fontScale
-                                            scaleY = fontScale
-                                        }
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .border(1.5.dp, fontBorderColor, RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onSelectFontFamily(fontOption)
-                                            appliedNoticeText = "Applied font: ${fontOption.displayName}"
-                                        }
-                                        .testTag("font_family_${fontOption.name.lowercase()}"),
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = fontBg
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = fontOption.displayName,
-                                                fontFamily = composeFamily,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = fontOption.description,
-                                                fontFamily = composeFamily,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        AnimatedVisibility(
-                                            visible = isSelected,
-                                            enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(140)),
-                                            exit = scaleOut(tween(100)) + fadeOut(tween(100))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = "Selected",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 6. Smooth Animated Slider: Web Page Text Zoom & Scale
-            AnimatedSettingsSection(index = 5) {
-                AnimatedSettingsSlider(
-                    value = textScalePercent,
-                    onValueChange = {
-                        textScalePercent = it
-                        appliedNoticeText = "Text scale: ${it.roundToInt()}%"
-                    },
-                    valueRange = 80f..150f,
-                    steps = 14,
-                    title = "Web Page Text Zoom",
-                    subtitle = "Adjust reading text size across all rendered websites",
-                    presets = listOf(90f, 100f, 120f, 140f),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 7. Animated Checkboxes: Privacy & Rendering Options
-            AnimatedSettingsSection(index = 6) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Privacy & Rendering Rules",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    AnimatedSettingsCheckbox(
-                        checked = blockTrackingCookies,
-                        onCheckedChange = {
-                            blockTrackingCookies = it
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            appliedNoticeText = if (it) "Enabled: Cookie Guard" else "Disabled: Cookie Guard"
-                        },
-                        title = "Block Third-Party Tracking Cookies",
-                        subtitle = "Prevents advertising networks from tracking browsing sessions",
-                        testTag = "settings_checkbox_cookies"
-                    )
-
-                    AnimatedSettingsCheckbox(
-                        checked = strictPopupPrevention,
-                        onCheckedChange = {
-                            strictPopupPrevention = it
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            appliedNoticeText = if (it) "Enabled: Strict Popups" else "Disabled: Strict Popups"
-                        },
-                        title = "Strict Popup & Redirect Prevention",
-                        subtitle = "Suppresses unsolicited tabs, overlays, and modal alerts",
-                        testTag = "settings_checkbox_popups"
-                    )
-
-                    AnimatedSettingsCheckbox(
-                        checked = hardwareAcceleration,
-                        onCheckedChange = {
-                            hardwareAcceleration = it
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            appliedNoticeText = if (it) "Enabled: GPU Rendering" else "Disabled: GPU Rendering"
-                        },
-                        title = "Hardware Accelerated Web Graphics",
-                        subtitle = "Uses device GPU for 60fps scrolling and video decoding",
-                        testTag = "settings_checkbox_hardware_accel"
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 8. Built-in Always-On Ad Blocker (Interactive Toggle Card)
-            AnimatedSettingsSection(index = 7) {
-                val cardBorderColor by animateColorAsState(
-                    targetValue = if (isAdBlockerActive) Color(0xFF10B981).copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-                    label = "adBlockerBorder"
-                )
-                val cardBgColor by animateColorAsState(
-                    targetValue = if (isAdBlockerActive) Color(0xFF064E3B).copy(alpha = 0.28f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-                    label = "adBlockerBg"
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = cardBgColor,
-                    border = BorderStroke(1.2.dp, cardBorderColor),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize()
-                        .testTag("settings_ad_blocker_card")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isAdBlockerActive) Color(0xFF10B981).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Security,
-                                    contentDescription = null,
-                                    tint = if (isAdBlockerActive) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .padding(8.dp)
-                                        .size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "Always-On Ad Blocker",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-
-                                    AnimatedContent(
-                                        targetState = isAdBlockerActive,
-                                        transitionSpec = {
-                                            (scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn()) togetherWith
-                                                (scaleOut() + fadeOut())
-                                        },
-                                        label = "adShieldBadgeTransition"
-                                    ) { active ->
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = if (active) Color(0xFF10B981) else Color(0xFF64748B)
-                                        ) {
-                                            Text(
-                                                text = if (active) "PRIMARY" else "OFF",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = if (active) Color(0xFF022C22) else Color.White,
-                                                fontSize = 9.sp,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Text(
-                                    text = "Blocks ads, trackers & popups on every site automatically",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.5.sp
-                                )
-                            }
-                        }
-
-                        var isToggleBouncing by remember { mutableStateOf(false) }
-                        val toggleScale by animateFloatAsState(
-                            targetValue = if (isToggleBouncing && !isReducedMotion) 1.15f else 1.0f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                            finishedListener = { isToggleBouncing = false },
-                            label = "toggleScale"
-                        )
-
-                        Switch(
-                            checked = isAdBlockerActive,
-                            onCheckedChange = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                isToggleBouncing = true
-                                onToggleAdBlocker()
-                                appliedNoticeText = if (!isAdBlockerActive) "Shield Enabled" else "Shield Paused"
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF022C22),
-                                checkedTrackColor = Color(0xFF10B981),
-                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            modifier = Modifier
-                                .graphicsLayer {
-                                    scaleX = toggleScale
-                                    scaleY = toggleScale
-                                }
-                                .testTag("ad_blocker_toggle_switch")
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 9. Data & Storage Maintenance (with Cleaning Indicator)
-            AnimatedSettingsSection(index = 8) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Browser Disk Cache",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Clean cached web files and reset storage",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    var isClearingCache by remember { mutableStateOf(false) }
-                    LaunchedEffect(isClearingCache) {
-                        if (isClearingCache) {
-                            kotlinx.coroutines.delay(650)
-                            isClearingCache = false
-                        }
-                    }
-
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            isClearingCache = true
-                            onClearCache()
-                            appliedNoticeText = "Disk cache purged"
-                        },
-                        enabled = !isClearingCache,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.testTag("clear_cache_button")
-                    ) {
-                        if (isClearingCache) {
-                            AsyncOperationProgressIndicator(
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Clearing…", fontSize = 12.sp)
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.CleaningServices,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Clear", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Privacy & Security Commitment
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+            // Categories Tab Row
+            ScrollableTabRow(
+                selectedTabIndex = selectedTab.ordinal,
+                edgePadding = 0.dp,
+                divider = {},
+                containerColor = Color.Transparent,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Privacy & Shield Active",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Nova does not sell or track your search history. Storage, cookies and cache stay strictly on your local device.",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                SettingsCategory.entries.forEach { category ->
+                    val isSelected = category == selectedTab
+                    Tab(
+                        selected = isSelected,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            selectedTab = category
+                        },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = category.icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = category.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
+                        },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // App Version Footer
-            Text(
-                text = "Nova Browser v1.2.0 • Moonlight Edition",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            // Main Scrollable Category Content
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                when (selectedTab) {
+                    SettingsCategory.THEMES -> {
+                        ThemesAndColorsTabContent(
+                            activeTheme = activeTheme,
+                            allThemes = allThemes,
+                            customThemes = customThemes,
+                            onSelectTheme = { theme ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setBrowserTheme(theme)
+                                appliedNoticeText = "Applied theme: ${theme.name}"
+                            },
+                            onCreateThemeClick = { showCreateThemeDialog = true },
+                            onDeleteCustomTheme = { themeId ->
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel?.deleteCustomTheme(themeId)
+                                appliedNoticeText = "Theme deleted"
+                            },
+                            onExportThemesClick = { showExportThemesDialog = true },
+                            onImportThemesClick = { showImportThemesDialog = true },
+                            onOpenColorPicker = { key -> activeColorPickerKey = key },
+                            onResetThemeColors = {
+                                viewModel?.resetThemeAndColors()
+                                appliedNoticeText = "Theme & colors reset to defaults"
+                            }
+                        )
+                    }
 
-            Spacer(modifier = Modifier.height(32.dp))
+                    SettingsCategory.TYPOGRAPHY -> {
+                        TypographyTabContent(
+                            currentFontFamily = currentFont,
+                            fontScale = fontScale,
+                            fontWeightDelta = fontWeightDelta,
+                            applyTextZoomToWeb = applyTextZoomToWeb,
+                            onSelectFont = { font ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelectFontFamily(font)
+                                viewModel?.setFontFamily(font)
+                                appliedNoticeText = "Applied font: ${font.displayName}"
+                            },
+                            onFontScaleChange = { scale ->
+                                viewModel?.setFontScale(scale)
+                                appliedNoticeText = "Font scale: ${(scale * 100).roundToInt()}%"
+                            },
+                            onFontWeightChange = { delta ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setFontWeightDelta(delta)
+                                appliedNoticeText = "Font weight adjusted"
+                            },
+                            onToggleApplyToWeb = { enabled ->
+                                viewModel?.setApplyTextZoomToWeb(enabled)
+                                appliedNoticeText = if (enabled) "Webpage zoom synchronized" else "Webpage zoom decoupled"
+                            },
+                            onResetTypography = {
+                                viewModel?.resetTypography()
+                                appliedNoticeText = "Typography reset to system defaults"
+                            }
+                        )
+                    }
+
+                    SettingsCategory.SEARCH -> {
+                        SearchEnginesTabContent(
+                            activeEngine = activeEngine,
+                            allEngines = allEngines,
+                            onSelectEngine = { engine ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setActiveCustomEngine(engine)
+                                SearchEngine.entries.find { it.id == engine.id }?.let { onSelectSearchEngine(it) }
+                                appliedNoticeText = "Default search engine: ${engine.displayName}"
+                            },
+                            onAddEngineClick = {
+                                editingSearchEngine = null
+                                showAddSearchEngineDialog = true
+                            },
+                            onEditEngineClick = { engine ->
+                                editingSearchEngine = engine
+                                showAddSearchEngineDialog = true
+                            },
+                            onDeleteEngineClick = { engineId ->
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel?.deleteCustomSearchEngine(engineId)
+                                appliedNoticeText = "Custom search engine deleted"
+                            },
+                            onRestoreDefaultEngines = {
+                                viewModel?.restoreDefaultSearchEngines()
+                                appliedNoticeText = "Search engines restored to defaults"
+                            }
+                        )
+                    }
+
+                    SettingsCategory.APPEARANCE -> {
+                        AppearanceTabContent(
+                            themeMode = themeMode,
+                            uiDensity = uiDensity,
+                            cornerRadiusDp = cornerRadiusDp,
+                            panelTransparency = panelTransparency,
+                            panelBlur = panelBlur,
+                            animationIntensity = animationIntensity,
+                            customWallpaperPath = customWallpaperPath,
+                            onSelectThemeMode = { mode ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelectThemeMode(mode)
+                                viewModel?.setThemeMode(mode)
+                                appliedNoticeText = "Appearance: ${mode.displayName}"
+                            },
+                            onSelectDensity = { density ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setUiDensity(density)
+                                appliedNoticeText = "Density: ${density.displayName}"
+                            },
+                            onSelectCornerRadius = { radius ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setCornerRadius(radius)
+                                appliedNoticeText = "Corner radius: ${radius}dp"
+                            },
+                            onTransparencyChange = { alpha ->
+                                viewModel?.setPanelTransparency(alpha)
+                                appliedNoticeText = "Transparency: ${(alpha * 100).roundToInt()}%"
+                            },
+                            onBlurChange = { blur ->
+                                viewModel?.setPanelBlurIntensity(blur)
+                                appliedNoticeText = "Blur intensity: ${(blur * 100).roundToInt()}%"
+                            },
+                            onSelectAnimationIntensity = { intensity ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setAnimationIntensity(intensity)
+                                appliedNoticeText = "Motion profile: ${intensity.displayName}"
+                            },
+                            onPickPhotoWallpaper = {
+                                photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            onPickFileWallpaper = {
+                                filePickerLauncher.launch("image/*")
+                            },
+                            onResetWallpaper = {
+                                onRemoveWallpaper()
+                                appliedNoticeText = "Wallpaper reset"
+                            },
+                            onResetAdvanced = {
+                                viewModel?.resetAdvancedSettings()
+                                appliedNoticeText = "Appearance reset to defaults"
+                            }
+                        )
+                    }
+
+                    SettingsCategory.PRIVACY -> {
+                        PrivacyAndDiskTabContent(
+                            isAdBlockerActive = adBlockerActive,
+                            blockCookies = blockCookies,
+                            strictPopups = strictPopups,
+                            hardwareAccel = hardwareAccel,
+                            onToggleAdBlocker = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onToggleAdBlocker()
+                                appliedNoticeText = if (!adBlockerActive) "Shield Enabled" else "Shield Paused"
+                            },
+                            onToggleBlockCookies = { v ->
+                                viewModel?.setBlockCookies(v)
+                                appliedNoticeText = if (v) "Cookie Guard Enabled" else "Cookie Guard Disabled"
+                            },
+                            onToggleStrictPopups = { v ->
+                                viewModel?.setStrictPopups(v)
+                                appliedNoticeText = if (v) "Strict Popups Blocked" else "Popup Rules Relaxed"
+                            },
+                            onToggleHardwareAccel = { v ->
+                                viewModel?.setHardwareAccel(v)
+                                appliedNoticeText = if (v) "GPU Acceleration Enabled" else "Software Rendering Layer"
+                            },
+                            onClearCache = {
+                                onClearCache()
+                                viewModel?.clearBrowserCache()
+                                appliedNoticeText = "Browser disk cache purged"
+                            },
+                            onFactoryResetClick = { showFactoryResetDialog = true }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+            }
         }
+    }
+
+    // --- Sub-Dialogs ---
+
+    if (showCreateThemeDialog) {
+        CreateThemeDialog(
+            baseTheme = activeTheme,
+            onDismiss = { showCreateThemeDialog = false },
+            onSaveTheme = { newTheme ->
+                viewModel?.saveCustomTheme(newTheme)
+                appliedNoticeText = "Custom theme '${newTheme.name}' saved & applied"
+            }
+        )
+    }
+
+    if (showAddSearchEngineDialog) {
+        AddSearchEngineDialog(
+            initialEngine = editingSearchEngine,
+            onDismiss = {
+                showAddSearchEngineDialog = false
+                editingSearchEngine = null
+            },
+            onSaveEngine = { engine ->
+                viewModel?.saveCustomSearchEngine(engine)
+                appliedNoticeText = "Search engine '${engine.displayName}' saved"
+            }
+        )
+    }
+
+    if (showExportThemesDialog) {
+        val exportedJson = viewModel?.exportThemesJson() ?: "{}"
+        ThemeJsonDialog(
+            isExportMode = true,
+            exportJsonString = exportedJson,
+            onDismiss = { showExportThemesDialog = false }
+        )
+    }
+
+    if (showImportThemesDialog) {
+        ThemeJsonDialog(
+            isExportMode = false,
+            onDismiss = { showImportThemesDialog = false },
+            onImportJson = { jsonStr ->
+                val success = viewModel?.importThemesJson(jsonStr) ?: false
+                appliedNoticeText = if (success) "Theme(s) imported successfully" else "Failed to parse theme JSON"
+            }
+        )
+    }
+
+    // Universal Component Color Picker Trigger
+    activeColorPickerKey?.let { key ->
+        val currentColorLong = when (key) {
+            "primary" -> activeTheme.primaryColor
+            "secondary" -> activeTheme.secondaryColor
+            "background" -> activeTheme.backgroundColor
+            "surface" -> activeTheme.surfaceColor
+            "toolbar" -> activeTheme.toolbarColor
+            "navigationBar" -> activeTheme.navigationBarColor
+            "text" -> activeTheme.onSurfaceColor
+            "secondaryText" -> activeTheme.secondaryTextColor
+            "border" -> activeTheme.borderColor
+            else -> activeTheme.primaryColor
+        }
+
+        val pickerTitle = when (key) {
+            "primary" -> "Primary Accent Color"
+            "secondary" -> "Secondary Accent Color"
+            "background" -> "Canvas Background Color"
+            "surface" -> "Panel / Dialog Surface"
+            "toolbar" -> "Toolbar & Address Bar"
+            "navigationBar" -> "Bottom Navigation Bar"
+            "text" -> "Headings & Primary Text"
+            "secondaryText" -> "Secondary Captions Text"
+            "border" -> "Border & Divider Color"
+            else -> "Component Color"
+        }
+
+        ColorPickerDialog(
+            title = pickerTitle,
+            initialColor = currentColorLong,
+            supportsAlpha = true,
+            onDismiss = { activeColorPickerKey = null },
+            onColorSelected = { newColorLong ->
+                val updatedTheme = when (key) {
+                    "primary" -> activeTheme.copy(primaryColor = newColorLong, accentColor = newColorLong)
+                    "secondary" -> activeTheme.copy(secondaryColor = newColorLong)
+                    "background" -> activeTheme.copy(backgroundColor = newColorLong)
+                    "surface" -> activeTheme.copy(surfaceColor = newColorLong)
+                    "toolbar" -> activeTheme.copy(toolbarColor = newColorLong)
+                    "navigationBar" -> activeTheme.copy(navigationBarColor = newColorLong)
+                    "text" -> activeTheme.copy(onSurfaceColor = newColorLong)
+                    "secondaryText" -> activeTheme.copy(secondaryTextColor = newColorLong)
+                    "border" -> activeTheme.copy(borderColor = newColorLong)
+                    else -> activeTheme
+                }
+                viewModel?.saveCustomTheme(updatedTheme.copy(isCustom = true))
+                appliedNoticeText = "Updated $pickerTitle"
+            }
+        )
+    }
+
+    // Factory Reset Confirmation Dialog
+    if (showFactoryResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showFactoryResetDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Reset All Browser Settings?") },
+            text = {
+                Text("This will restore themes, fonts, search engines, and appearance configurations back to factory defaults.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel?.performFullFactoryReset()
+                        showFactoryResetDialog = false
+                        appliedNoticeText = "Factory settings restored"
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Confirm Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFactoryResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
-/**
- * Animated Settings Section Container.
- * Provides a subtle cascading entry animation when Settings is opened.
- */
+// ==========================================
+// TAB 1: THEMES & UNIVERSAL COLOR STUDIO
+// ==========================================
+
 @Composable
-private fun AnimatedSettingsSection(
-    index: Int,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+private fun ThemesAndColorsTabContent(
+    activeTheme: BrowserTheme,
+    allThemes: List<BrowserTheme>,
+    customThemes: List<BrowserTheme>,
+    onSelectTheme: (BrowserTheme) -> Unit,
+    onCreateThemeClick: () -> Unit,
+    onDeleteCustomTheme: (String) -> Unit,
+    onExportThemesClick: () -> Unit,
+    onImportThemesClick: () -> Unit,
+    onOpenColorPicker: (String) -> Unit,
+    onResetThemeColors: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Section Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Built-in Themes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Crafted palettes with verified contrast and depth",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Button(
+                onClick = onCreateThemeClick,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.testTag("create_custom_theme_button")
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Create", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Grid of Built-in Themes with Live Previews
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            BrowserTheme.BUILT_IN_THEMES.forEach { theme ->
+                ThemePreviewCard(
+                    theme = theme,
+                    isSelected = theme.id == activeTheme.id,
+                    onClick = { onSelectTheme(theme) }
+                )
+            }
+        }
+
+        // Custom Themes (if any)
+        if (customThemes.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = "Your Custom Themes",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                customThemes.forEach { theme ->
+                    ThemePreviewCard(
+                        theme = theme,
+                        isSelected = theme.id == activeTheme.id,
+                        onClick = { onSelectTheme(theme) },
+                        onDeleteClick = { onDeleteCustomTheme(theme.id) }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Theme Import / Export Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onExportThemesClick,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(imageVector = Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Export JSON", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = onImportThemesClick,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Import JSON", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Universal Color Studio (Component Color Controls)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Universal Color Studio",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Customize individual browser components",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(onClick = onResetThemeColors) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Reset colors",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        ComponentColorSlotRow("Primary Accent & Focus", activeTheme.primaryColor) { onOpenColorPicker("primary") }
+        ComponentColorSlotRow("Secondary Highlight", activeTheme.secondaryColor) { onOpenColorPicker("secondary") }
+        ComponentColorSlotRow("Canvas Background", activeTheme.backgroundColor) { onOpenColorPicker("background") }
+        ComponentColorSlotRow("Panels & Sheets Surface", activeTheme.surfaceColor) { onOpenColorPicker("surface") }
+        ComponentColorSlotRow("Toolbar & Address Bar", activeTheme.toolbarColor) { onOpenColorPicker("toolbar") }
+        ComponentColorSlotRow("Bottom Navigation Bar", activeTheme.navigationBarColor) { onOpenColorPicker("navigationBar") }
+        ComponentColorSlotRow("Headings & Primary Text", activeTheme.onSurfaceColor) { onOpenColorPicker("text") }
+        ComponentColorSlotRow("Subtitles & Captions", activeTheme.secondaryTextColor) { onOpenColorPicker("secondaryText") }
+        ComponentColorSlotRow("Borders & Dividers", activeTheme.borderColor) { onOpenColorPicker("border") }
+    }
+}
+
+@Composable
+private fun ThemePreviewCard(
+    theme: BrowserTheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onDeleteClick: (() -> Unit)? = null
 ) {
     val isReducedMotion = LocalReducedMotion.current
-    var isRendered by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        if (!isReducedMotion) {
-            kotlinx.coroutines.delay((index * 25L).coerceAtMost(160L))
-        }
-        isRendered = true
-    }
-
-    val alpha by animateFloatAsState(
-        targetValue = if (isRendered) 1f else 0f,
-        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
-        label = "settingsSectionAlpha_$index"
+    val cardScale by animateFloatAsState(
+        targetValue = if (isSelected && !isReducedMotion) 1.015f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "themeScale_${theme.id}"
     )
 
-    val translationY by animateFloatAsState(
-        targetValue = if (isRendered || isReducedMotion) 0f else 12f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-        label = "settingsSectionTransY_$index"
-    )
-
-    Box(
-        modifier = modifier
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Color(theme.backgroundColor),
+        border = BorderStroke(
+            if (isSelected) 2.dp else 1.dp,
+            if (isSelected) Color(theme.primaryColor) else Color(theme.borderColor).copy(alpha = 0.5f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
             .graphicsLayer {
-                this.alpha = alpha
-                this.translationY = translationY
+                scaleX = cardScale
+                scaleY = cardScale
             }
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .testTag("theme_card_${theme.id}")
     ) {
-        content()
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Mock Browser Top Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(theme.toolbarColor))
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color(theme.primaryColor))
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "nova://newtab",
+                        color = Color(theme.onSurfaceColor).copy(alpha = 0.9f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color(theme.secondaryColor).copy(alpha = 0.7f))
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Information Row & Mini Page Cards
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = theme.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(theme.onSurfaceColor)
+                        )
+                        if (theme.isCustom) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(theme.primaryColor).copy(alpha = 0.25f)
+                            ) {
+                                Text(
+                                    text = "CUSTOM",
+                                    color = Color(theme.primaryColor),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = if (theme.isDark) "Dark mode palette" else "Light daylight mode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(theme.secondaryTextColor),
+                        fontSize = 11.sp
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isSelected) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(theme.primaryColor),
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Active",
+                                tint = Color(theme.onPrimaryColor),
+                                modifier = Modifier
+                                    .padding(4.dp)
+                                    .size(16.dp)
+                            )
+                        }
+                    }
+
+                    if (onDeleteClick != null) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete theme",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-/**
- * Smooth Animated Checkbox with popping checkmark and interactive hover/press feedback.
- */
 @Composable
-private fun AnimatedSettingsCheckbox(
+private fun ComponentColorSlotRow(
+    label: String,
+    colorLong: Long,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color(colorLong))
+                        .border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.ColorLens,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// TAB 2: TYPOGRAPHY CUSTOMIZATION
+// ==========================================
+
+@Composable
+private fun TypographyTabContent(
+    currentFontFamily: AppFontFamily,
+    fontScale: Float,
+    fontWeightDelta: Int,
+    applyTextZoomToWeb: Boolean,
+    onSelectFont: (AppFontFamily) -> Unit,
+    onFontScaleChange: (Float) -> Unit,
+    onFontWeightChange: (Int) -> Unit,
+    onToggleApplyToWeb: (Boolean) -> Unit,
+    onResetTypography: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Typography & Fonts",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "High-fidelity bundled Google Fonts & UI text scaling",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(onClick = onResetTypography) {
+                Icon(imageVector = Icons.Default.Refresh, contentDescription = "Reset fonts", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Font Family List
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppFontFamily.entries.forEach { fontOption ->
+                val isSelected = fontOption == currentFontFamily
+                val composeFamily = getComposeFontFamily(fontOption)
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(
+                        if (isSelected) 1.5.dp else 1.dp,
+                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onSelectFont(fontOption) }
+                        .testTag("font_${fontOption.name.lowercase()}")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = fontOption.displayName,
+                                fontFamily = composeFamily,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = fontOption.description,
+                                fontFamily = composeFamily,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Text Scale Slider
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = Icons.Default.ZoomIn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Interface Text Scale",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    text = "${(fontScale * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Slider(
+            value = fontScale,
+            onValueChange = onFontScaleChange,
+            valueRange = 0.85f..1.35f,
+            steps = 9,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Font Weight Delta
+        Text(
+            text = "Font Weight Tuning",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf(-1 to "Light", 0 to "Regular", 1 to "Medium", 2 to "Bold").forEach { (delta, label) ->
+                val isSelected = fontWeightDelta == delta
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onFontWeightChange(delta) }
+                ) {
+                    Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Synchronize with Web Pages Toggle
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onToggleApplyToWeb(!applyTextZoomToWeb) }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Synchronize Web Page Zoom",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Applies text scale proportionally to rendered websites in WebView",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = applyTextZoomToWeb,
+                    onCheckedChange = onToggleApplyToWeb
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// TAB 3: SEARCH ENGINES
+// ==========================================
+
+@Composable
+private fun SearchEnginesTabContent(
+    activeEngine: CustomSearchEngine,
+    allEngines: List<CustomSearchEngine>,
+    onSelectEngine: (CustomSearchEngine) -> Unit,
+    onAddEngineClick: () -> Unit,
+    onEditEngineClick: (CustomSearchEngine) -> Unit,
+    onDeleteEngineClick: (String) -> Unit,
+    onRestoreDefaultEngines: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Search Engine Manager",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Active default provider for omnibox queries",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Button(
+                onClick = onAddEngineClick,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.testTag("add_custom_engine_button")
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Custom", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            allEngines.forEach { engine ->
+                val isSelected = engine.id == activeEngine.id
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(
+                        if (isSelected) 1.5.dp else 1.dp,
+                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onSelectEngine(engine) }
+                        .testTag("search_engine_${engine.id}")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = engine.displayName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (!engine.isBuiltIn) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = "CUSTOM",
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = engine.hint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!engine.isBuiltIn) {
+                                IconButton(
+                                    onClick = { onEditEngineClick(engine) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit engine",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onDeleteEngineClick(engine.id) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete engine",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = onRestoreDefaultEngines,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(imageVector = Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Restore Default Engines", fontSize = 12.sp)
+        }
+    }
+}
+
+// ==========================================
+// TAB 4: APPEARANCE & MOTION
+// ==========================================
+
+@Composable
+private fun AppearanceTabContent(
+    themeMode: ThemeMode,
+    uiDensity: UiDensity,
+    cornerRadiusDp: Int,
+    panelTransparency: Float,
+    panelBlur: Float,
+    animationIntensity: AnimationIntensity,
+    customWallpaperPath: String?,
+    onSelectThemeMode: (ThemeMode) -> Unit,
+    onSelectDensity: (UiDensity) -> Unit,
+    onSelectCornerRadius: (Int) -> Unit,
+    onTransparencyChange: (Float) -> Unit,
+    onBlurChange: (Float) -> Unit,
+    onSelectAnimationIntensity: (AnimationIntensity) -> Unit,
+    onPickPhotoWallpaper: () -> Unit,
+    onPickFileWallpaper: () -> Unit,
+    onResetWallpaper: () -> Unit,
+    onResetAdvanced: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Appearance & Motion",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Layout density, geometry, transparency & motion tuning",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(onClick = onResetAdvanced) {
+                Icon(imageVector = Icons.Default.Refresh, contentDescription = "Reset appearance", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Appearance Mode (System / Bright / Dark)
+        Text(
+            text = "Light / Dark Appearance Mode",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ThemeMode.entries.forEach { mode ->
+                val isSelected = mode == themeMode
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelectThemeMode(mode) }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        val icon = when (mode) {
+                            ThemeMode.BRIGHT -> Icons.Default.LightMode
+                            ThemeMode.DARK -> Icons.Default.DarkMode
+                            ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                        }
+                        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = mode.displayName.split(" ").first(), style = MaterialTheme.typography.labelSmall, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // UI Density
+        Text(
+            text = "Interface Density",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            UiDensity.entries.forEach { density ->
+                val isSelected = density == uiDensity
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelectDensity(density) }
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = density.displayName, style = MaterialTheme.typography.labelMedium, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Corner Radius
+        Text(
+            text = "Component Corner Radius",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            CornerRadiusOption.entries.forEach { opt ->
+                val isSelected = cornerRadiusDp == opt.cornerRadiusDp
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSelectCornerRadius(opt.cornerRadiusDp) }
+                ) {
+                    Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Text(text = opt.displayName, style = MaterialTheme.typography.labelSmall, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, fontSize = 10.5.sp)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Transparency & Blur Sliders
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Glass Surface Transparency", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = "${(panelTransparency * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(
+            value = panelTransparency,
+            onValueChange = onTransparencyChange,
+            valueRange = 0.40f..1.0f,
+            colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Backdrop Blur Intensity", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = "${(panelBlur * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(
+            value = panelBlur,
+            onValueChange = onBlurChange,
+            valueRange = 0.0f..1.0f,
+            colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Animation Intensity
+        Text(
+            text = "Animation & Transition Feel",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AnimationIntensity.entries.forEach { intensity ->
+                val isSelected = animationIntensity == intensity
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelectAnimationIntensity(intensity) }
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = intensity.displayName, style = MaterialTheme.typography.labelMedium, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Custom Wallpaper
+        Text(
+            text = "Custom Wallpaper",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = onPickPhotoWallpaper,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Photos", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = onPickFileWallpaper,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(imageVector = Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Files", fontSize = 12.sp)
+            }
+        }
+
+        if (customWallpaperPath != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onResetWallpaper,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(imageVector = Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Reset Custom Wallpaper", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+// ==========================================
+// TAB 5: PRIVACY & DISK MAINTENANCE
+// ==========================================
+
+@Composable
+private fun PrivacyAndDiskTabContent(
+    isAdBlockerActive: Boolean,
+    blockCookies: Boolean,
+    strictPopups: Boolean,
+    hardwareAccel: Boolean,
+    onToggleAdBlocker: () -> Unit,
+    onToggleBlockCookies: (Boolean) -> Unit,
+    onToggleStrictPopups: (Boolean) -> Unit,
+    onToggleHardwareAccel: (Boolean) -> Unit,
+    onClearCache: () -> Unit,
+    onFactoryResetClick: () -> Unit
+) {
+    val isReducedMotion = LocalReducedMotion.current
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Privacy & Rendering Rules",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "Always-on shield, cookie guards, hardware acceleration",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Ad Blocker Toggle Card
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = if (isAdBlockerActive) Color(0xFF064E3B).copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            border = BorderStroke(1.2.dp, if (isAdBlockerActive) Color(0xFF10B981).copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth().testTag("settings_ad_blocker_card")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isAdBlockerActive) Color(0xFF10B981).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = if (isAdBlockerActive) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(8.dp).size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "Always-On Ad Blocker", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (isAdBlockerActive) Color(0xFF10B981) else Color(0xFF64748B)
+                            ) {
+                                Text(
+                                    text = if (isAdBlockerActive) "PRIMARY" else "OFF",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (isAdBlockerActive) Color(0xFF022C22) else Color.White,
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                        Text(text = "Blocks trackers & banner overlays automatically", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.5.sp)
+                    }
+                }
+
+                Switch(
+                    checked = isAdBlockerActive,
+                    onCheckedChange = { onToggleAdBlocker() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF022C22),
+                        checkedTrackColor = Color(0xFF10B981)
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Checkboxes
+        SettingsCheckboxItem(
+            checked = blockCookies,
+            onCheckedChange = onToggleBlockCookies,
+            title = "Block Third-Party Tracking Cookies",
+            subtitle = "Protects your browsing identity from advertising trackers"
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        SettingsCheckboxItem(
+            checked = strictPopups,
+            onCheckedChange = onToggleStrictPopups,
+            title = "Strict Popup & Redirect Prevention",
+            subtitle = "Suppresses unsolicited modals, redirection loops, and banner popups"
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        SettingsCheckboxItem(
+            checked = hardwareAccel,
+            onCheckedChange = onToggleHardwareAccel,
+            title = "GPU Hardware Acceleration",
+            subtitle = "Utilizes device GPU hardware for 60fps web rendering"
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Disk Cache Maintenance
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Browser Disk Cache",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Purge cached web graphics, scripts, and temporary files",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            var isClearing by remember { mutableStateOf(false) }
+            LaunchedEffect(isClearing) {
+                if (isClearing) {
+                    kotlinx.coroutines.delay(650)
+                    isClearing = false
+                }
+            }
+
+            Button(
+                onClick = {
+                    isClearing = true
+                    onClearCache()
+                },
+                enabled = !isClearing,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("clear_cache_button")
+            ) {
+                if (isClearing) {
+                    AsyncOperationProgressIndicator(
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Purging…", fontSize = 12.sp)
+                } else {
+                    Icon(imageVector = Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Purge Cache", fontSize = 12.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Factory Reset Section
+        OutlinedButton(
+            onClick = onFactoryResetClick,
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("factory_reset_button")
+        ) {
+            Icon(imageVector = Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Full Factory Reset", fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun SettingsCheckboxItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     title: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    testTag: String = ""
+    subtitle: String
 ) {
     val isReducedMotion = LocalReducedMotion.current
-
-    val boxBgColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.primary else Color.Transparent,
-        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-        label = "chkBoxBg"
-    )
-    val boxBorderColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-        label = "chkBoxBorder"
+    val checkScale by animateFloatAsState(
+        targetValue = if (checked && !isReducedMotion) 1.08f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "chkScale"
     )
 
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (checked) 0.35f else 0.18f),
         border = BorderStroke(1.dp, if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else Color.Transparent),
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .clickable { onCheckedChange(!checked) }
-            .then(if (testTag.isNotBlank()) Modifier.testTag(testTag) else Modifier)
     ) {
         Row(
             modifier = Modifier
@@ -1238,12 +1888,16 @@ private fun AnimatedSettingsCheckbox(
             Box(
                 modifier = Modifier
                     .size(22.dp)
+                    .graphicsLayer {
+                        scaleX = checkScale
+                        scaleY = checkScale
+                    }
                     .clip(RoundedCornerShape(6.dp))
-                    .background(boxBgColor)
-                    .border(1.5.dp, boxBorderColor, RoundedCornerShape(6.dp)),
+                    .background(if (checked) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .border(1.5.dp, if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                AnimatedVisibility(
+                androidx.compose.animation.AnimatedVisibility(
                     visible = checked,
                     enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(120)),
                     exit = scaleOut(tween(90)) + fadeOut(tween(90))
@@ -1272,152 +1926,6 @@ private fun AnimatedSettingsCheckbox(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     fontSize = 11.5.sp
                 )
-            }
-        }
-    }
-}
-
-/**
- * Smooth Animated Slider with live value bubble and quick preset chips.
- */
-@Composable
-private fun AnimatedSettingsSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    title: String,
-    subtitle: String,
-    unit: String = "%",
-    presets: List<Float> = emptyList(),
-    modifier: Modifier = Modifier
-) {
-    val isReducedMotion = LocalReducedMotion.current
-    val haptic = LocalHapticFeedback.current
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ZoomIn,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                // Live animated value badge
-                AnimatedContent(
-                    targetState = value.roundToInt(),
-                    transitionSpec = {
-                        (slideInVertically(animationSpec = tween(140)) { it / 2 } + fadeIn(tween(140))) togetherWith
-                            (slideOutVertically(animationSpec = tween(120)) { -it / 2 } + fadeOut(tween(120)))
-                    },
-                    label = "sliderValueBubble"
-                ) { intVal ->
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = "$intVal$unit",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.5.sp
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Slider(
-                value = value,
-                onValueChange = onValueChange,
-                valueRange = valueRange,
-                steps = steps,
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (presets.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    presets.forEach { preset ->
-                        val isPresetSelected = (value.roundToInt() == preset.roundToInt())
-                        val presetScale by animateFloatAsState(
-                            targetValue = if (isPresetSelected && !isReducedMotion) 1.05f else 1.0f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                            label = "presetScale_$preset"
-                        )
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isPresetSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                            border = BorderStroke(
-                                if (isPresetSelected) 1.2.dp else 1.dp,
-                                if (isPresetSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .graphicsLayer {
-                                    scaleX = presetScale
-                                    scaleY = presetScale
-                                }
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onValueChange(preset)
-                                }
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(vertical = 5.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${preset.roundToInt()}$unit",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isPresetSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }

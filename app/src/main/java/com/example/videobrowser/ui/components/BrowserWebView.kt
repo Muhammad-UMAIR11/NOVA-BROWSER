@@ -264,8 +264,18 @@ fun BrowserWebView(
                         View(ctx)
                     }
                 },
-                update = {
-                    // Controlled through webActions Flow & targetUrl LaunchedEffect
+                update = { wv ->
+                    if (wv is WebView) {
+                        val state = viewModel.uiState.value
+                        if (state.applyTextZoomToWeb) {
+                            val zoomPercent = (state.fontScale * 100).toInt().coerceIn(75, 175)
+                            if (wv.settings.textZoom != zoomPercent) {
+                                wv.settings.textZoom = zoomPercent
+                            }
+                        } else if (wv.settings.textZoom != 100) {
+                            wv.settings.textZoom = 100
+                        }
+                    }
                 },
                 onRelease = { wv ->
                     try {
