@@ -51,6 +51,12 @@ import com.example.videobrowser.ui.glass.GlassCard
 import com.example.videobrowser.ui.glass.GlassTokens
 import com.example.videobrowser.ui.motion.AnimatedDropdownMenuItem
 import com.example.videobrowser.ui.motion.AnimatedDropdownPanel
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.iosPressEffect
+import com.example.videobrowser.ui.motion.motionIosSpring
+import com.example.videobrowser.ui.motion.motionTween
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +70,7 @@ fun TabsSheet(
     onDismiss: () -> Unit,
     visible: Boolean = true
 ) {
+    val isReducedMotion = LocalReducedMotion.current
     val clipboardManager = LocalClipboardManager.current
     var menuExpandedForTabId by remember { mutableStateOf<String?>(null) }
 
@@ -84,6 +91,7 @@ fun TabsSheet(
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
                     .height(36.dp)
+                    .iosPressEffect(pressedScale = 0.92f, isReducedMotion = isReducedMotion)
                     .testTag("tabs_add_new_button")
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -103,7 +111,13 @@ fun TabsSheet(
                     val isActive = tab.id == activeTabId
 
                     GlassCard(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem(
+                                fadeInSpec = motionIosSpring(dampingRatio = 0.82f, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow, isReducedMotion = isReducedMotion),
+                                fadeOutSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion),
+                                placementSpec = motionIosSpring(dampingRatio = 0.82f, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow, isReducedMotion = isReducedMotion)
+                            ),
                         backgroundColor = if (isActive) Color(0x3838BDF8) else Color(0x2E1E293B),
                         borderColor = if (isActive) GlassTokens.AccentCyan else GlassTokens.GlassBorderDim,
                         onClick = {
@@ -200,7 +214,9 @@ fun TabsSheet(
                             }
                             IconButton(
                                 onClick = { onCloseTab(tab.id) },
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .iosPressEffect(pressedScale = 0.86f, isReducedMotion = isReducedMotion)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,

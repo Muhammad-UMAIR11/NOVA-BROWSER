@@ -11,15 +11,22 @@ import java.util.Locale
  *
  * Features:
  * 1. Sub-millisecond network request interception (DoubleClick, AdSense, Taboola, Outbrain, Criteo, PopAds, etc.).
- * 2. Deep cosmetic DOM element filtering & continuous MutationObserver ad sweeping.
+ * 2. Deep cosmetic DOM element filtering & debounced MutationObserver ad sweeping.
  * 3. Aggressive popup, pop-under, and deceptive redirect prevention.
  * 4. Tracking beacon & telemetry blocking to protect user privacy and accelerate page load speeds.
+ * 5. Accurate request classification (AD, TRACKER, or NONE) and false-positive prevention.
  */
 object AdBlockerEngine {
 
-    // Comprehensive curated set of known ad network, tracker, and telemetric domains
+    enum class BlockType {
+        NONE,
+        AD,
+        TRACKER
+    }
+
+    // Comprehensive curated set of known ad network, programmatic DSP, and popup domains
     private val AD_DOMAINS: Set<String> = hashSetOf(
-        // Google Ad & Tracking ecosystem
+        // Google Ad ecosystem
         "doubleclick.net",
         "googleadservices.com",
         "googlesyndication.com",
@@ -27,9 +34,6 @@ object AdBlockerEngine {
         "pagead2.googlesyndication.com",
         "tpc.googlesyndication.com",
         "admob.com",
-        "google-analytics.com",
-        "googletagservices.com",
-        "googletagmanager.com",
 
         // Major programmatic ad networks & DSPs
         "adnxs.com",
@@ -37,6 +41,7 @@ object AdBlockerEngine {
         "criteo.com",
         "criteo.net",
         "rubiconproject.com",
+        "magnite.com",
         "pubmatic.com",
         "openx.net",
         "casalemedia.com",
@@ -60,6 +65,19 @@ object AdBlockerEngine {
         "nativeads.com",
         "zergnet.com",
         "content.ad",
+        "triplelift.com",
+        "undertone.com",
+        "gumgum.com",
+        "indexexchange.com",
+        "smartclip.net",
+        "teads.tv",
+        "adtech.de",
+        "adtechus.com",
+        "serving-sys.com",
+        "flashtalking.com",
+        "conversantmedia.com",
+        "dotomi.com",
+        "matomy.com",
 
         // Content recommendation & native ad widgets (Taboola, Outbrain, MGID, Revcontent)
         "taboola.com",
@@ -68,6 +86,8 @@ object AdBlockerEngine {
         "mgid.com",
         "ligatus.com",
         "plista.com",
+        "engageya.com",
+        "adblade.com",
 
         // Aggressive popups, pop-unders & deceptive redirects
         "popads.net",
@@ -85,8 +105,10 @@ object AdBlockerEngine {
         "zeroredirect.com",
         "adsupply.com",
         "ero-advertising.com",
+        "popunder.net",
+        "trafficstars.com",
 
-        // Mobile app & in-stream ad networks
+        // Mobile in-app / SDK ad networks
         "applovin.com",
         "unityads.unity3d.com",
         "ironsrc.com",
@@ -96,8 +118,28 @@ object AdBlockerEngine {
         "fyber.com",
         "mintegral.com",
         "pangle.io",
+        "leadbolt.com",
+        "startapp.com",
 
-        // Trackers, audience profiling & data brokers
+        // Web publisher ad management networks
+        "mediavine.com",
+        "adthrive.com",
+        "raptive.com",
+        "ezoic.com",
+        "ezoic.net",
+        "monetizemore.com",
+        "infolinks.com",
+        "bidvertiser.com",
+        "sovrn.co",
+        "lijit.com"
+    )
+
+    // Curated set of known tracking, analytics, and telemetric domains
+    private val TRACKER_DOMAINS: Set<String> = hashSetOf(
+        // Web analytics, audience profiling & data brokers
+        "google-analytics.com",
+        "googletagservices.com",
+        "googletagmanager.com",
         "scorecardresearch.com",
         "quantserve.com",
         "moatads.com",
@@ -108,9 +150,36 @@ object AdBlockerEngine {
         "fullstory.com",
         "tealiumiq.com",
         "segment.com",
+        "segment.io",
+        "mixpanel.com",
+        "amplitude.com",
+        "heap.io",
+        "clarity.ms",
+        "newrelic.com",
+        "nr-data.net",
+        "mc.yandex.ru",
+        "statcounter.com",
+        "clicky.com",
+        "omtrdc.net",
+        "demdex.net",
+        "everesttech.net",
+        "app-measurement.com",
+        "braze.com",
+        "optimizely.com",
+
+        // Social tracking & ad conversion pixels
+        "analytics.tiktok.com",
+        "static.ads-twitter.com",
+        "ct.pinterest.com",
+        "snap.licdn.com",
+
+        // Attribution & device fingerprinting
         "branch.io",
         "appsflyer.com",
-        "adjust.com"
+        "adjust.com",
+        "singular.net",
+        "kochava.com",
+        "attributionapp.com"
     )
 
     // Common ad script path keywords
@@ -124,64 +193,119 @@ object AdBlockerEngine {
         "/gpt/pubads_",
         "/ad-banner/",
         "/ad_banner/",
-        "connect.facebook.net/en_US/fbevents.js",
+        "/banner_ad.js"
+    )
+
+    // Known tracking script path keywords & pixel endpoints
+    private val TRACKER_URL_PATTERNS = listOf(
+        "connect.facebook.net/en_us/fbevents.js",
+        "connect.facebook.net/signals/config/",
+        "facebook.com/tr/",
+        "facebook.com/tr?",
         "analytics.tiktok.com/i18n/pixel/",
-        "ads.twitter.com/uwt.js"
+        "ads.twitter.com/uwt.js",
+        "static.ads-twitter.com/uwt.js",
+        "snap.licdn.com/li.lms-analytics/",
+        "sc-static.net/scevent.min.js",
+        "ct.pinterest.com/v3/",
+        "google-analytics.com/analytics.js",
+        "google-analytics.com/g/collect",
+        "google-analytics.com/collect",
+        "googletagmanager.com/gtag/js",
+        "googletagmanager.com/gtm.js",
+        "hotjar.com/c/hotjar-",
+        "clarity.ms/tag/"
+    )
+
+    // Safety whitelist for root domains where specific services reside
+    private val LEGITIMATE_ROOTS_WHITELIST: Set<String> = hashSetOf(
+        "wikipedia.org",
+        "github.com",
+        "google.com",
+        "apple.com",
+        "microsoft.com",
+        "mozilla.org",
+        "amazon.com",
+        "walmart.com",
+        "target.com",
+        "ebay.com",
+        "fedex.com",
+        "ups.com",
+        "dhl.com",
+        "usps.com"
     )
 
     /**
-     * Inspects a requested URI and determines if it belongs to an ad network or tracking service.
+     * Inspects a requested URI and determines whether it is an ad or tracker.
      */
     fun isAdOrTracker(uri: Uri?): Boolean {
-        if (uri == null) return false
-        val host = uri.host?.lowercase(Locale.ROOT) ?: return false
-        val urlString = uri.toString().lowercase(Locale.ROOT)
-
-        // 1. Direct or parent domain match
-        if (isDomainBlocked(host)) {
-            return true
-        }
-
-        // 2. Subdomain check for common ad prefixes
-        if (host.startsWith("ads.") ||
-            host.startsWith("ad.") ||
-            host.startsWith("adserver.") ||
-            host.startsWith("adservice.") ||
-            host.startsWith("banner.") ||
-            host.startsWith("telemetry.") ||
-            host.startsWith("tracking.")
-        ) {
-            return true
-        }
-
-        // 3. Known ad script URL pattern match
-        for (pattern in AD_URL_PATTERNS) {
-            if (urlString.contains(pattern)) {
-                return true
-            }
-        }
-
-        return false
+        return classifyRequest(uri) != BlockType.NONE
     }
 
     /**
-     * Fast hierarchical domain matching: checks host and any parent domain suffixes
-     * e.g. "pagead2.googlesyndication.com" matches "googlesyndication.com".
+     * Classifies a network request into AD, TRACKER, or NONE.
+     * Prevents false positives by ensuring legitimate sites (e.g. ad.nl, tracking.fedex.com, bannerhealth.com)
+     * are never misidentified as ads or trackers.
      */
-    private fun isDomainBlocked(host: String): Boolean {
-        if (AD_DOMAINS.contains(host)) return true
+    fun classifyRequest(uri: Uri?, isForMainFrame: Boolean = false): BlockType {
+        if (uri == null) return BlockType.NONE
+        // Never block main frame document loads through shouldInterceptRequest
+        if (isForMainFrame) return BlockType.NONE
 
-        val parts = host.split(".")
-        if (parts.size >= 2) {
-            // Check last two parts: e.g. "doubleclick.net"
-            val rootDomain = "${parts[parts.size - 2]}.${parts[parts.size - 1]}"
-            if (AD_DOMAINS.contains(rootDomain)) return true
+        val host = uri.host?.lowercase(Locale.ROOT) ?: return BlockType.NONE
+        val urlString = uri.toString().lowercase(Locale.ROOT)
 
-            // Check last three parts: e.g. "adservice.google.com" or "unityads.unity3d.com"
-            if (parts.size >= 3) {
-                val subRootDomain = "${parts[parts.size - 3]}.${parts[parts.size - 2]}.${parts[parts.size - 1]}"
-                if (AD_DOMAINS.contains(subRootDomain)) return true
+        // 1. Direct or parent domain match for dedicated ad networks
+        if (isHostInSet(host, AD_DOMAINS)) {
+            return BlockType.AD
+        }
+
+        // 2. Direct or parent domain match for dedicated tracker/analytics domains
+        if (isHostInSet(host, TRACKER_DOMAINS)) {
+            return BlockType.TRACKER
+        }
+
+        // 3. Subdomain check for dedicated ad servers (requires >= 3 domain parts to avoid false positives like ad.nl)
+        val hostParts = host.split(".")
+        if (hostParts.size >= 3) {
+            val subPrefix = hostParts[0]
+            if (subPrefix == "adserver" || subPrefix == "adservice" || subPrefix == "ads" || subPrefix == "ad") {
+                val root = "${hostParts[hostParts.size - 2]}.${hostParts[hostParts.size - 1]}"
+                if (!LEGITIMATE_ROOTS_WHITELIST.contains(root)) {
+                    return BlockType.AD
+                }
             }
+        }
+
+        // 4. Known ad script URL pattern match
+        for (pattern in AD_URL_PATTERNS) {
+            if (urlString.contains(pattern)) {
+                return BlockType.AD
+            }
+        }
+
+        // 5. Known tracking script URL pattern match
+        for (pattern in TRACKER_URL_PATTERNS) {
+            if (urlString.contains(pattern)) {
+                return BlockType.TRACKER
+            }
+        }
+
+        return BlockType.NONE
+    }
+
+    /**
+     * Efficient hierarchical domain matching against a hash set.
+     * Checks exact host and parent domain segments in O(parts) lookups.
+     * e.g., "sub.adservice.google.com" checks "sub.adservice.google.com", "adservice.google.com", "google.com".
+     */
+    fun isHostInSet(host: String, domainSet: Set<String>): Boolean {
+        if (domainSet.contains(host)) return true
+        var dotIndex = host.indexOf('.')
+        while (dotIndex != -1 && dotIndex < host.length - 1) {
+            val sub = host.substring(dotIndex + 1)
+            if (domainSet.contains(sub)) return true
+            dotIndex = host.indexOf('.', dotIndex + 1)
         }
         return false
     }
@@ -189,7 +313,7 @@ object AdBlockerEngine {
     /**
      * Checks if a navigation URL should be blocked (e.g. deceptive ad pop-ups and intent hijackings).
      */
-    fun shouldBlockNavigation(uri: Uri?): Boolean {
+    fun shouldBlockNavigation(uri: Uri?, isStrictPopups: Boolean = true): Boolean {
         if (uri == null) return false
         val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: ""
         val host = uri.host?.lowercase(Locale.ROOT) ?: ""
@@ -200,11 +324,91 @@ object AdBlockerEngine {
         }
 
         // Block navigation directly into known pop-up / redirection ad networks
-        if (isDomainBlocked(host)) {
+        if (isHostInSet(host, AD_DOMAINS)) {
             return true
         }
 
         return false
+    }
+
+    // 1x1 transparent GIF byte array
+    private val TRANSPARENT_1X1_GIF = byteArrayOf(
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00,
+        0x01, 0x00, 0x80.toByte(), 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x21, 0xF9.toByte(), 0x04,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02,
+        0x02, 0x44, 0x01, 0x00, 0x3B
+    )
+
+    private val SAFE_STUB_JS = """
+        (function() {
+            window.adsbygoogle = window.adsbygoogle || [];
+            window.ga = window.ga || function(){};
+            window.gtag = window.gtag || function(){};
+            window.fbq = window.fbq || function(){};
+            window._fbq = window._fbq || window.fbq;
+        })();
+    """.trimIndent().toByteArray(Charsets.UTF_8)
+
+    /**
+     * Creates an optimized WebResourceResponse tailored to the blocked resource type.
+     * JavaScript scripts receive benign no-op SDK stubs so host page code doesn't throw
+     * unhandled TypeErrors. Tracking beacons and pixels receive a 1x1 transparent image
+     * so layout images don't display broken icon artifacts.
+     */
+    fun createBlockedResponse(url: String): WebResourceResponse {
+        val lower = url.lowercase(Locale.ROOT)
+        val isScript = lower.endsWith(".js") ||
+                lower.contains(".js?") ||
+                lower.contains("/js/") ||
+                lower.contains("adsbygoogle") ||
+                lower.contains("analytics") ||
+                lower.contains("fbevents") ||
+                lower.contains("gtag") ||
+                lower.contains("gtm") ||
+                lower.contains("prebid")
+
+        if (isScript) {
+            return WebResourceResponse(
+                "application/javascript",
+                "utf-8",
+                200,
+                "OK",
+                mapOf(
+                    "Cache-Control" to "no-store, no-cache",
+                    "Access-Control-Allow-Origin" to "*"
+                ),
+                ByteArrayInputStream(SAFE_STUB_JS)
+            )
+        }
+
+        val isImage = lower.endsWith(".gif") ||
+                lower.endsWith(".png") ||
+                lower.endsWith(".jpg") ||
+                lower.endsWith(".jpeg") ||
+                lower.endsWith(".webp") ||
+                lower.contains("/tr?") ||
+                lower.contains("/tr/") ||
+                lower.contains("/collect?") ||
+                lower.contains("/collect/") ||
+                lower.contains("beacon")
+
+        if (isImage) {
+            return WebResourceResponse(
+                "image/gif",
+                "binary",
+                200,
+                "OK",
+                mapOf(
+                    "Cache-Control" to "no-store, no-cache",
+                    "Access-Control-Allow-Origin" to "*"
+                ),
+                ByteArrayInputStream(TRANSPARENT_1X1_GIF)
+            )
+        }
+
+        return createEmptyResponse()
     }
 
     /**
@@ -223,93 +427,99 @@ object AdBlockerEngine {
 
     /**
      * Injected CSS & DOM JavaScript to cleanly hide all remaining ad placeholders,
-     * video pre-roll ad containers, sticky overlays, and block unprompted popup windows.
+     * video pre-roll ad containers, and sticky overlays without breaking page layout.
+     * Debounced to eliminate CPU churn and prevent observer recursion.
      */
     val COSMETIC_BLOCK_SCRIPT: String = """
         (function() {
-            if (window.__nova_adblock_initialized) return;
-            window.__nova_adblock_initialized = true;
+            var STYLE_ID = 'nova-adblock-styles';
+            if (!document.getElementById(STYLE_ID)) {
+                var css = `
+                    ins.adsbygoogle, [class*="adsbygoogle"], [id*="google_ads"],
+                    [id*="banner-ad"], [class*="ad-banner"], [class*="banner-ad"],
+                    [class*="sponsored-"], [id*="sponsored-"],
+                    .taboola, .outbrain, .mgid, .revcontent,
+                    iframe[src*="doubleclick"], iframe[src*="adservice"],
+                    iframe[src*="adsystem"], iframe[src*="adnxs"],
+                    div[data-ad-unit], div[data-ad-client], div[data-ad-slot],
+                    .ad-container, .advertisement-container, #ad-wrapper, .ad_box,
+                    .banner_ad, .ad-slot, .ad_unit, [id^="dfp-ad-"],
+                    .native-ad, .sponsored-content, .sticky-ad, .floating-ad,
+                    .video-ad-overlay, .ad-showing .video-ads,
+                    [class*="popup-ad"], [id*="popup-ad"] {
+                        display: none !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        min-height: 0 !important;
+                        width: 0 !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                `;
+                var styleEl = document.createElement('style');
+                styleEl.id = STYLE_ID;
+                styleEl.type = 'text/css';
+                styleEl.textContent = css;
 
-            // 1. Inject Comprehensive Anti-Ad Stylesheet
-            var css = `
-                ins.adsbygoogle, [class*="adsbygoogle"], [id*="google_ads"],
-                [id*="banner-ad"], [class*="ad-banner"], [class*="banner-ad"],
-                [class*="sponsored-"], [id*="sponsored-"],
-                .taboola, .outbrain, .mgid, .revcontent,
-                iframe[src*="doubleclick"], iframe[src*="adservice"],
-                iframe[src*="adsystem"], iframe[src*="adnxs"],
-                div[data-ad-unit], div[data-ad-client], div[data-ad-slot],
-                .ad-container, .advertisement-container, #ad-wrapper, .ad_box,
-                .banner_ad, .ad-slot, .ad_unit, [id^="dfp-ad-"],
-                .native-ad, .sponsored-content, .sticky-ad, .floating-ad,
-                .video-ad-overlay, .ad-showing .video-ads,
-                [class*="popup-ad"], [id*="popup-ad"] {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    width: 0 !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
+                function attachStyle() {
+                    if (document.getElementById(STYLE_ID)) return;
+                    var target = document.head || document.documentElement || document.body;
+                    if (target) {
+                        target.appendChild(styleEl);
+                    } else if (document.addEventListener) {
+                        document.addEventListener('DOMContentLoaded', attachStyle, { once: true });
+                    }
                 }
-            `;
-            var styleEl = document.createElement('style');
-            styleEl.type = 'text/css';
-            styleEl.appendChild(document.createTextNode(css));
-            (document.head || document.documentElement).appendChild(styleEl);
+                attachStyle();
+            }
 
-            // 2. Active DOM node sweeper
-            function sweepAdElements() {
-                try {
-                    var selectors = [
-                        'ins.adsbygoogle',
-                        '[class*="adsbygoogle"]',
-                        '.taboola',
-                        '.outbrain',
-                        '.mgid',
-                        'iframe[src*="doubleclick"]',
-                        'iframe[src*="adservice"]',
-                        '.ad-container',
-                        '.ad_box',
-                        '.advertisement'
-                    ];
-                    selectors.forEach(function(sel) {
-                        var nodes = document.querySelectorAll(sel);
-                        for (var i = 0; i < nodes.length; i++) {
-                            nodes[i].remove();
+            if (window.__nova_adblock_sweeper_active) return;
+            window.__nova_adblock_sweeper_active = true;
+
+            var sweepTimeout = null;
+            function debouncedSweep() {
+                if (sweepTimeout) return;
+                sweepTimeout = setTimeout(function() {
+                    sweepTimeout = null;
+                    try {
+                        var selectors = [
+                            'ins.adsbygoogle',
+                            '.taboola',
+                            '.outbrain',
+                            '.mgid',
+                            'iframe[src*="doubleclick"]',
+                            'iframe[src*="adservice"]',
+                            '.ad-container'
+                        ];
+                        for (var s = 0; s < selectors.length; s++) {
+                            var nodes = document.querySelectorAll(selectors[s]);
+                            for (var i = 0; i < nodes.length; i++) {
+                                var n = nodes[i];
+                                if (n && n.parentNode) {
+                                    n.style.display = 'none';
+                                }
+                            }
                         }
-                    });
-                } catch(e) {}
+                    } catch(e) {}
+                }, 200);
             }
 
-            sweepAdElements();
+            debouncedSweep();
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', sweepAdElements);
+                document.addEventListener('DOMContentLoaded', debouncedSweep);
             }
-            window.addEventListener('load', sweepAdElements);
 
-            // 3. Continuous MutationObserver for dynamic single-page applications
+            // Safe, throttled MutationObserver that hides rather than removes to prevent observer feedback loops
             try {
-                var observer = new MutationObserver(function(mutations) {
-                    sweepAdElements();
+                var obs = new MutationObserver(function() {
+                    debouncedSweep();
                 });
-                observer.observe(document.documentElement || document.body, {
+                obs.observe(document.documentElement || document.body, {
                     childList: true,
                     subtree: true
                 });
-            } catch(e) {}
-
-            // 4. Block Deceptive Popups and New Window Hijackers
-            try {
-                var origOpen = window.open;
-                window.open = function(url, target, features) {
-                    if (!url || url === 'about:blank' || url.indexOf('javascript:') === 0) {
-                        return null;
-                    }
-                    return origOpen.apply(window, arguments);
-                };
             } catch(e) {}
         })();
     """.trimIndent()

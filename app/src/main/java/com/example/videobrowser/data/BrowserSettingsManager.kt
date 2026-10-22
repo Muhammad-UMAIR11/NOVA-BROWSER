@@ -38,6 +38,8 @@ class BrowserSettingsManager(context: Context) {
         private const val KEY_BLOCK_COOKIES = "block_cookies"
         private const val KEY_STRICT_POPUPS = "strict_popups"
         private const val KEY_HARDWARE_ACCEL = "hardware_accel"
+        private const val KEY_LOW_END_MODE = "low_end_mode"
+        private const val KEY_TOTAL_BLOCKED_ADS = "total_blocked_ads"
     }
 
     private val prefs: SharedPreferences =
@@ -295,6 +297,12 @@ class BrowserSettingsManager(context: Context) {
 
     fun getHardwareAccel(): Boolean = prefs.getBoolean(KEY_HARDWARE_ACCEL, true)
     fun setHardwareAccel(v: Boolean) = prefs.edit().putBoolean(KEY_HARDWARE_ACCEL, v).apply()
+
+    fun getLowEndMode(): Boolean = prefs.getBoolean(KEY_LOW_END_MODE, false)
+    fun setLowEndMode(v: Boolean) = prefs.edit().putBoolean(KEY_LOW_END_MODE, v).apply()
+
+    fun getTotalBlockedAds(): Int = prefs.getInt(KEY_TOTAL_BLOCKED_ADS, 0)
+    fun setTotalBlockedAds(v: Int) = prefs.edit().putInt(KEY_TOTAL_BLOCKED_ADS, v).apply()
 
     // --- Reset Actions ---
 

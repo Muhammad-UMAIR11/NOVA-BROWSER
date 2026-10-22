@@ -36,7 +36,8 @@ class MainActivity : ComponentActivity() {
                 uiDensity = uiState.uiDensity,
                 cornerRadiusDp = uiState.cornerRadiusDp,
                 panelTransparency = uiState.panelTransparency,
-                animationIntensity = uiState.animationIntensity
+                animationIntensity = uiState.animationIntensity,
+                lowEndMode = uiState.lowEndMode
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

@@ -347,4 +347,66 @@ class DownloadManagerTest {
         composeTestRule.waitForIdle()
         assertTrue(removeClicked)
     }
+
+    @Test
+    fun `network exception detection classifies socket drops and timeouts accurately`() {
+        val socketEx = java.net.SocketException("Connection reset by peer")
+        val timeoutEx = java.net.SocketTimeoutException("Read timed out")
+        val unknownHostEx = java.net.UnknownHostException("Unable to resolve host")
+        val wrappedEx = RuntimeException("Outer failure", java.io.IOException("Broken pipe"))
+        val normalEx = IllegalArgumentException("Invalid state")
+
+        assertTrue(engine.isNetworkException(socketEx))
+        assertTrue(engine.isNetworkException(timeoutEx))
+        assertTrue(engine.isNetworkException(unknownHostEx))
+        assertTrue(engine.isNetworkException(wrappedEx))
+        assertFalse(engine.isNetworkException(normalEx))
+    }
+
+    @Test
+    fun `download task card displays waiting for network badge and auto-resumes from offset`() {
+        val waitingTask = DownloadTask(
+            id = "net-wait-1",
+            title = "Nature Documentary",
+            mediaUrl = "https://example.com/doc.mp4",
+            pageUrl = "https://example.com",
+            fileName = "doc.mp4",
+            mimeType = "video/mp4",
+            format = "MP4",
+            quality = "1080p",
+            totalBytes = 50_000_000L,
+            downloadedBytes = 25_000_000L,
+            status = DownloadStatus.PAUSED,
+            progress = 0.5f,
+            isWaitingForNetwork = true,
+            errorMessage = "Offline: Saved at 23.8 MB. Auto-resumes when online."
+        )
+
+        var resumeClicked = false
+
+        composeTestRule.setContent {
+            DownloadManagerComponent(
+                tasks = listOf(waitingTask),
+                onCancelTask = {},
+                onRemoveTask = {},
+                onPauseTask = {},
+                onResumeTask = { resumeClicked = true },
+                onRetryTask = {},
+                showHeader = false
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        // Card should display task file name, waiting for network badge, and resume affordance
+        composeTestRule.onNodeWithTag("download_task_card_net-wait-1").assertExists()
+        composeTestRule.onNodeWithText("doc.mp4").assertExists()
+        composeTestRule.onNodeWithText("Waiting for Network").assertExists()
+        composeTestRule.onNodeWithText("Offline: Saved at 23.8 MB. Auto-resumes when online.").assertExists()
+        composeTestRule.onNodeWithText("📶 Auto-resumes from 23.8 MB").assertExists()
+
+        // Resume button should be present and clickable
+        composeTestRule.onNodeWithTag("resume_download_button_net-wait-1").performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(resumeClicked)
+    }
 }

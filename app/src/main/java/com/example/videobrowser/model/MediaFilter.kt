@@ -1,288 +1,128 @@
 package com.example.videobrowser.model
 
-import android.net.Uri
+import java.net.URI
 
 object MediaFilter {
 
-    private val VIDEO_EXTENSIONS = listOf(
-        ".mp4", ".webm", ".mkv", ".m4v", ".mov", ".3gp", ".flv",
-        ".m3u8", ".mpd", ".ts"
+    private val VIDEO_EXTENSIONS = setOf(
+        "mp4", "m3u8", "mpd", "webm", "mkv", "mov", "avi", "flv", "3gp", "ts", "m4v", "f4v"
     )
 
-    private val VIDEO_MIME_TYPES = listOf(
-        "video/mp4",
-        "video/webm",
-        "video/x-matroska",
-        "video/quicktime",
-        "video/3gpp",
-        "video/x-flv",
-        "video/mp2t",
-        "application/x-mpegurl",
-        "application/vnd.apple.mpegurl",
-        "application/dash+xml"
+    private val AD_TRACKER_KEYWORDS = listOf(
+        "googleads", "googlesyndication", "pagead", "doubleclick", "adservice", "analytics", "tracking", "telemetry",
+        "adsystem", "adnxs", "taboola", "outbrain", "adserver", "advert", "sponsor", "commercial", "/ads/", "ad_break", "vast"
     )
 
-    private val AD_AND_TRACKING_HOSTS = listOf(
-        "doubleclick.net",
-        "googleadservices.com",
-        "googlesyndication.com",
-        "adnxs.com",
-        "scorecardresearch.com",
-        "outbrain.com",
-        "taboola.com",
-        "adsystem.com",
-        "adsafeprotected.com",
-        "amazon-adsystem.com",
-        "advertising.com",
-        "rubiconproject.com",
-        "pubmatic.com",
-        "criteo.com",
-        "moatads.com",
-        "applovin.com",
-        "unityads.unity3d.com",
-        "vungle.com",
-        "adcolony.com",
-        "inmobi.com",
-        "chartboost.com",
-        "openx.net",
-        "smartadserver.com"
-    )
-
-    private val AD_PATH_KEYWORDS = listOf(
-        "/ads/", "/ad/", "/advertisement/",
-        "vast.xml", "vpaid", "/pixel",
-        "pagead", "tracking", "telemetry",
-        "analytics", "beacon", "ad_break"
-    )
-
-    private val IGNORED_EXTENSIONS = listOf(
-        ".js", ".css", ".html", ".htm", ".json", ".xml",
-        ".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".ico",
-        ".woff", ".woff2", ".ttf", ".otf", ".eot",
-        ".mp3", ".aac", ".wav", ".ogg", ".flac"
-    )
-
-    private val SOCIAL_MEDIA_NON_VIDEO_PATTERNS = listOf(
-        "profile_images", "avatar", "user_avatar", "emoji", "reactions",
-        "story_thumb", "story_preview", "live_preview", "cover_photo",
-        "sprite", "/graphql/query", "/logging/", "/telemetry/", "preview.redd.it",
-        "/stickers/", "/stickers_v2/", "badge_icon"
-    )
-
-    private val GIF_PATTERNS = listOf(
-        ".gif", "mime=image/gif", "image/gif",
-        "giphy.com/media", "tenor.com/view", "gfycat.com",
-        "/emojis/", "/stickers/", "format=gif", "animated_gif"
-    )
-
-    /**
-     * Checks if a URL or MIME type matches a video candidate.
-     */
     fun isCandidateVideo(url: String, mimeType: String? = null): Boolean {
         if (url.isBlank()) return false
-
-        // Check if explicitly blocked as an ad or tracker
-        if (isLikelyAdvertisementOrTracker(url)) {
-            return false
-        }
-
         val lowerUrl = url.lowercase()
 
-        // Filter out obvious GIF or emoji/sticker media
-        if (lowerUrl.endsWith(".gif") || mimeType?.equals("image/gif", ignoreCase = true) == true) {
-            return false
-        }
+        if (isLikelyAdvertisementOrTracker(lowerUrl)) return false
 
-        // Check social media non-video assets (avatars, emojis, previews)
-        if (SOCIAL_MEDIA_NON_VIDEO_PATTERNS.any { lowerUrl.contains(it) }) {
-            return false
-        }
-
-        // Check ignored non-video static extensions
-        val cleanPath = url.substringBefore('?').lowercase()
-        if (IGNORED_EXTENSIONS.any { cleanPath.endsWith(it) }) {
-            return false
-        }
-
-        // Check explicit MIME type
-        if (!mimeType.isNullOrBlank()) {
+        if (mimeType != null && mimeType.isNotBlank()) {
             val lowerMime = mimeType.lowercase()
-            if (VIDEO_MIME_TYPES.any { lowerMime.contains(it) } || lowerMime.startsWith("video/")) {
+            if (lowerMime.startsWith("video/") ||
+                lowerMime.contains("mpegurl") ||
+                lowerMime.contains("dash+xml") ||
+                lowerMime.contains("octet-stream")
+            ) {
                 return true
             }
         }
 
-        // Check video extension in path
-        if (VIDEO_EXTENSIONS.any { cleanPath.endsWith(it) }) {
+        if (lowerUrl.contains("video%2f") || lowerUrl.contains("mime=video")) {
             return true
         }
 
-        // Check query params often containing video formats or indicators
-        val queryIndications = listOf(
-            "mime=video",
-            "video_id=",
-            ".mp4?",
-            ".webm?",
-            ".m3u8?",
-            "format=mp4",
-            "videoplayback",
-            "stream/video"
-        )
-        if (queryIndications.any { lowerUrl.contains(it) }) {
-            return true
+        val cleanPath = try {
+            URI(url).path?.lowercase() ?: lowerUrl
+        } catch (_: Exception) {
+            lowerUrl
         }
 
-        return false
+        return VIDEO_EXTENSIONS.any { ext ->
+            cleanPath.contains(".$ext") ||
+            lowerUrl.contains(".$ext") ||
+            lowerUrl.contains("format=$ext") ||
+            lowerUrl.contains("format%3d$ext") ||
+            lowerUrl.contains("ext=$ext") ||
+            lowerUrl.contains("type=$ext")
+        } ||
+            lowerUrl.contains(".m3u8") ||
+            lowerUrl.contains(".mpd") ||
+            lowerUrl.contains(".mp4")
     }
 
-    /**
-     * Identifies if a media element is likely an animated GIF, short preview loop, or decorative asset.
-     */
+    fun isLikelyAdvertisementOrTracker(url: String): Boolean {
+        val lower = url.lowercase()
+        return AD_TRACKER_KEYWORDS.any { lower.contains(it) }
+    }
+
     fun isLikelyGifOrDecorative(
         url: String,
-        mimeType: String? = null,
-        duration: Double = 0.0,
         width: Int = 0,
         height: Int = 0,
+        duration: Double = 0.0,
+        mimeType: String? = null,
         isLooping: Boolean = false,
         isMuted: Boolean = false,
         hasControls: Boolean = true
     ): Boolean {
         val lowerUrl = url.lowercase()
-        if (GIF_PATTERNS.any { lowerUrl.contains(it) }) return true
-
-        // Looping + muted + short duration (< 4.5 seconds) without native controls is characteristic of a GIF/preview
-        if (isLooping && isMuted && !hasControls && duration > 0.0 && duration < 4.5) {
+        if (lowerUrl.contains(".gif") || lowerUrl.contains("giphy.com") || lowerUrl.contains("tenor.com")) {
             return true
         }
-
-        // Extremely small decorative video (< 200x200 and < 3s)
-        if (width in 1..199 && height in 1..199 && duration in 0.1..3.0) {
-            return true
-        }
-
+        if (width in 1..100 && height in 1..100) return true
+        if (duration in 0.01..2.5 && isLooping && isMuted && !hasControls) return true
         return false
     }
 
-    /**
-     * Computes a multi-signal priority score to rank candidates, ensuring the video
-     * the user is actively playing or watching is strictly prioritized first.
-     */
-    fun calculatePriorityScore(media: DetectedMedia): Int {
-        var score = 0
-
-        // 1. User Interaction & Active Playback (Highest Priority)
-        if (media.isPlaying) {
-            score += 1500
-        }
-        if (media.userInteracted) {
-            score += 800
-        }
-
-        // 2. Duration signals (Full content vs micro clip)
-        when {
-            media.durationSeconds >= 60.0 -> score += 500
-            media.durationSeconds >= 20.0 -> score += 300
-            media.durationSeconds >= 5.0 -> score += 100
-            media.durationSeconds in 0.1..3.0 -> score -= 300 // Micro clip penalty
-        }
-
-        // 3. Resolution & Dimensions
-        when {
-            media.height >= 1080 -> score += 400
-            media.height >= 720 -> score += 300
-            media.height >= 480 -> score += 150
-            media.height in 1..240 -> score -= 200
-        }
-
-        // 4. Player Controls vs Looping Decoration
-        if (media.hasControls) {
-            score += 150
-        }
-        if (media.isLooping && media.isMuted && media.durationSeconds in 0.1..5.0) {
-            score -= 600 // Heavy GIF loop penalty
-        }
-
-        // 5. Downloadability / Direct Stream
-        if (media.isDownloadable) {
-            score += 100
-        }
-
-        // 6. Source Signals
-        if (media.source == DetectionSource.PLAYBACK_EVENT) {
-            score += 400
-        } else if (media.source == DetectionSource.DOM_INSPECTION) {
-            score += 100
-        }
-
-        // 7. Suspicious Keywords in URL
-        val lowerUrl = media.mediaUrl.lowercase()
-        if (lowerUrl.contains("preview") || lowerUrl.contains("thumb") || lowerUrl.contains("trailer_thumb") || lowerUrl.contains("teaser")) {
-            score -= 350
-        }
-
-        return score
-    }
-
-    /**
-     * Filters known advertisement networks, tracking pixels, and telemetry beacons.
-     */
-    fun isLikelyAdvertisementOrTracker(url: String): Boolean {
-        return try {
-            val uri = Uri.parse(url)
-            val host = uri.host?.lowercase() ?: ""
-            if (AD_AND_TRACKING_HOSTS.any { host.contains(it) }) {
-                return true
-            }
-            val lowerUrl = url.lowercase()
-            AD_PATH_KEYWORDS.any { lowerUrl.contains(it) }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    /**
-     * Extracts a human-friendly format tag (e.g., MP4, WEBM, HLS).
-     */
     fun inferFormat(url: String, mimeType: String?): String {
         val lowerUrl = url.lowercase()
-        val lowerMime = mimeType?.lowercase() ?: ""
+        val lowerMime = mimeType?.lowercase().orEmpty()
 
         return when {
-            lowerMime.contains("mp4") || lowerUrl.contains(".mp4") -> "MP4"
-            lowerMime.contains("webm") || lowerUrl.contains(".webm") -> "WEBM"
-            lowerMime.contains("mpegurl") || lowerUrl.contains(".m3u8") -> "HLS (m3u8)"
-            lowerMime.contains("dash") || lowerUrl.contains(".mpd") -> "DASH (mpd)"
-            lowerMime.contains("matroska") || lowerUrl.contains(".mkv") -> "MKV"
-            lowerMime.contains("quicktime") || lowerUrl.contains(".mov") -> "MOV"
-            lowerMime.contains("3gpp") || lowerUrl.contains(".3gp") -> "3GP"
-            lowerMime.startsWith("video/") -> lowerMime.removePrefix("video/").uppercase()
-            else -> "Video"
+            lowerUrl.contains(".m3u8") || lowerMime.contains("mpegurl") -> "HLS (m3u8)"
+            lowerUrl.contains(".mpd") || lowerMime.contains("dash+xml") -> "DASH (mpd)"
+            lowerUrl.contains(".webm") || lowerMime.contains("webm") -> "WEBM"
+            lowerUrl.contains(".mkv") -> "MKV"
+            lowerUrl.contains(".mov") -> "MOV"
+            lowerUrl.contains(".3gp") -> "3GP"
+            lowerUrl.contains(".flv") -> "FLV"
+            else -> "MP4"
         }
     }
 
-    /**
-     * Identifies if media is an adaptive live/segmented stream.
-     */
     fun isStreamManifest(url: String, mimeType: String?): Boolean {
         val lowerUrl = url.lowercase()
-        val lowerMime = mimeType?.lowercase() ?: ""
+        val lowerMime = mimeType?.lowercase().orEmpty()
         return lowerUrl.contains(".m3u8") ||
-                lowerUrl.contains(".mpd") ||
-                lowerMime.contains("mpegurl") ||
-                lowerMime.contains("dash")
+            lowerUrl.contains(".mpd") ||
+            lowerMime.contains("mpegurl") ||
+            lowerMime.contains("dash+xml")
     }
 
-    /**
-     * Cleans up video title by stripping common web suffix junk and noisy tags.
-     */
-    fun cleanTitle(title: String?): String {
-        if (title.isNullOrBlank()) return "Detected Video"
-        return title
-            .replace(Regex("""\s*[-|–]\s*(YouTube|Vimeo|Dailymotion|Facebook|Instagram|Twitter|X|Watch.*|Free.*).*$""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*\(Official\s*(HD|Video|Trailer|Audio)?\s*\)""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*\[(Official\s*)?(HD|1080p|720p|4K)?\s*\]""", RegexOption.IGNORE_CASE), "")
+    fun cleanTitle(title: String): String {
+        if (title.isBlank()) return "Detected Video"
+        var cleaned = title
+            .replace(Regex("(?i)https?://\\S+"), "")
+            .replace(Regex("(?i)\\s*[\\[(](?:official|hd|4k|hq|full hd|video|clip|trailer)[^\\])]*[\\])]"), "")
+            .replace(Regex("\\s*\\|.*$"), "")
+            .replace(Regex("(?i)\\s*[-–—]\\s*(?:youtube|vimeo|dailymotion|twitch|facebook|tiktok|twitter|reddit|instagram|watch\\b.*|free\\b.*|online\\b.*).*$"), "")
             .trim()
-            .ifEmpty { "Detected Video" }
+
+        cleaned = cleaned.replace(Regex("_+"), " ").trim()
+        return cleaned.ifBlank { "Detected Video" }
+    }
+
+    fun calculatePriorityScore(media: DetectedMedia): Int {
+        var score = 100
+        if (media.isPlaying) score += 500
+        if (media.userInteracted) score += 300
+        if (media.durationSeconds > 60.0) score += 200
+        if (media.isStream) score += 150
+        if (media.height >= 720) score += 100
+        if (media.isLikelyPreview) score -= 300
+        return score
     }
 }

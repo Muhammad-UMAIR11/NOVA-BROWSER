@@ -47,7 +47,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -522,7 +524,11 @@ fun AudioWaveAnimation(
             Box(
                 modifier = Modifier
                     .width(3.dp)
-                    .height((14 * fraction).coerceAtLeast(3f).dp)
+                    .height(14.dp)
+                    .graphicsLayer {
+                        scaleY = fraction.coerceIn(0.2f, 1f)
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
                     .clip(RoundedCornerShape(1.5.dp))
                     .background(tint)
             )

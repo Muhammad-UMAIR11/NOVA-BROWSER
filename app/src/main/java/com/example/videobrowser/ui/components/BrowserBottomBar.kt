@@ -50,6 +50,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.iosPressEffect
+import com.example.videobrowser.ui.motion.motionSpring
+import com.example.videobrowser.ui.motion.motionTween
 
 @Composable
 fun BrowserBottomBar(
@@ -65,28 +70,30 @@ fun BrowserBottomBar(
     onOpenMediaSheet: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isReducedMotion = LocalReducedMotion.current
+
     // Smooth color tint transitions for action buttons
     val backTint by animateColorAsState(
         targetValue = if (canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-        animationSpec = tween(180),
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
         label = "backTint"
     )
 
     val forwardTint by animateColorAsState(
         targetValue = if (canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-        animationSpec = tween(180),
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
         label = "forwardTint"
     )
 
     val toolsIconColor by animateColorAsState(
         targetValue = if (isToolsOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-        animationSpec = tween(180),
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
         label = "toolsIconColor"
     )
 
     val mediaIconTint by animateColorAsState(
         targetValue = if (detectedMediaCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(180),
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
         label = "mediaIconTint"
     )
 
@@ -133,6 +140,7 @@ fun BrowserBottomBar(
                 ),
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("nav_home_button")
             ) {
                 Icon(
@@ -150,6 +158,7 @@ fun BrowserBottomBar(
                 ),
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("nav_tools_button")
             ) {
                 Icon(
@@ -167,6 +176,7 @@ fun BrowserBottomBar(
                 ),
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("nav_new_tab_button")
             ) {
                 Icon(
@@ -184,6 +194,7 @@ fun BrowserBottomBar(
                 ),
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("nav_media_button")
             ) {
                 BadgedBox(
@@ -243,34 +254,36 @@ private fun NavigationControlButton(
     // Immediate button micro-scale on touch press / tap
     val buttonScale by animateFloatAsState(
         targetValue = when {
-            isPressed && enabled && !isReducedMotion -> 0.86f
-            isTriggered && enabled && !isReducedMotion -> 0.92f
+            isPressed && enabled && !isReducedMotion -> 0.88f
+            isTriggered && enabled && !isReducedMotion -> 0.94f
             else -> 1.0f
         },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+        animationSpec = motionSpring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+            isReducedMotion = isReducedMotion
         ),
         label = "navButtonScale_$testTag"
     )
 
-    // Directional nudge when pressed or tapped (-3.5dp for back, +3.5dp for forward)
+    // Directional nudge when pressed or tapped (-2.5dp for back, +2.5dp for forward)
     val nudgeX by animateFloatAsState(
         targetValue = when {
-            (isPressed || isTriggered) && enabled && !isReducedMotion -> nudgeDirection * 3.5f
+            (isPressed || isTriggered) && enabled && !isReducedMotion -> nudgeDirection * 2.5f
             else -> 0f
         },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+        animationSpec = motionSpring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+            isReducedMotion = isReducedMotion
         ),
         label = "navNudgeX_$testTag"
     )
 
     // Immediate subtle highlight halo behind the button when pressed
     val haloAlpha by animateFloatAsState(
-        targetValue = if ((isPressed || isTriggered) && enabled) 0.18f else 0f,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
+        targetValue = if ((isPressed || isTriggered) && enabled && !isReducedMotion) 0.16f else 0f,
+        animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.Standard, isReducedMotion = isReducedMotion),
         label = "navHaloAlpha_$testTag"
     )
 

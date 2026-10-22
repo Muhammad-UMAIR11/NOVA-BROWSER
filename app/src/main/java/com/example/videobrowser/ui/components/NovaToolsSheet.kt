@@ -2,7 +2,9 @@ package com.example.videobrowser.ui.components
 
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -68,7 +70,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,6 +99,7 @@ import androidx.compose.ui.unit.sp
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MenuMotionSpecs
 import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
 import com.example.videobrowser.ui.motion.motionTween
 import kotlin.math.roundToInt
 
@@ -142,7 +147,8 @@ fun NovaToolsSheet(
     val cardBorder = GlassTokens.GlassBorderDim
 
     var directUrlInput by remember { mutableStateOf("") }
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val dragOffsetAnim = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val isReducedMotion = LocalReducedMotion.current
     val scrollState = rememberScrollState()
@@ -157,7 +163,7 @@ fun NovaToolsSheet(
     // Reset drag offset when visibility changes
     LaunchedEffect(visible) {
         if (!visible) {
-            dragOffsetY = 0f
+            dragOffsetAnim.snapTo(0f)
         }
     }
 
@@ -165,10 +171,12 @@ fun NovaToolsSheet(
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < 0 && dragOffsetY > 0f) {
-                    val newOffset = (dragOffsetY + available.y).coerceAtLeast(0f)
-                    val consumed = dragOffsetY - newOffset
-                    dragOffsetY = newOffset
+                if (available.y < 0 && dragOffsetAnim.value > 0f) {
+                    val newOffset = (dragOffsetAnim.value + available.y).coerceAtLeast(0f)
+                    val consumed = dragOffsetAnim.value - newOffset
+                    coroutineScope.launch {
+                        dragOffsetAnim.snapTo(newOffset)
+                    }
                     return Offset(0f, -consumed)
                 }
                 return Offset.Zero
@@ -176,7 +184,10 @@ fun NovaToolsSheet(
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (available.y > 0 && scrollState.value == 0) {
-                    dragOffsetY = (dragOffsetY + available.y).coerceAtLeast(0f)
+                    val newOffset = (dragOffsetAnim.value + available.y).coerceAtLeast(0f)
+                    coroutineScope.launch {
+                        dragOffsetAnim.snapTo(newOffset)
+                    }
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
@@ -184,12 +195,17 @@ fun NovaToolsSheet(
 
             override suspend fun onPreFling(available: Velocity): Velocity {
                 val dismissThresholdPx = with(density) { 70.dp.toPx() }
-                if (dragOffsetY > dismissThresholdPx || (available.y > 750f && dragOffsetY > 10f)) {
+                if (dragOffsetAnim.value > dismissThresholdPx || (available.y > 750f && dragOffsetAnim.value > 10f)) {
                     onDismiss()
-                    dragOffsetY = 0f
                     return available
                 }
-                dragOffsetY = 0f
+                dragOffsetAnim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
                 return Velocity.Zero
             }
         }
@@ -197,8 +213,8 @@ fun NovaToolsSheet(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
-        exit = fadeOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)),
+        enter = fadeIn(motionTween(MotionDurations.Medium, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)),
+        exit = fadeOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)),
         modifier = modifier.fillMaxSize()
     ) {
         Box(
@@ -220,17 +236,28 @@ fun NovaToolsSheet(
             )
 
             // Sliding Tools Sheet Container with real-time gesture offset
-            AnimatedVisibility(
-                visible = visible,
-                enter = MenuMotionSpecs.menuEnter(isReducedMotion, fromBottom = true),
-                exit = MenuMotionSpecs.menuExit(isReducedMotion, toBottom = true)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateEnterExit(
+                        enter = slideInVertically(
+                            initialOffsetY = { if (isReducedMotion) 0 else it },
+                            animationSpec = motionTween(MotionDurations.Medium, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)
+                        ),
+                        exit = slideOutVertically(
+                            targetOffsetY = { if (isReducedMotion) 0 else it },
+                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+                        ) + fadeOut(
+                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+                        )
+                    )
             ) {
                 val panelShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+                        .offset { IntOffset(0, dragOffsetAnim.value.roundToInt()) }
                         .nestedScroll(nestedScrollConnection)
                         .shadow(
                             elevation = 28.dp,
@@ -266,20 +293,39 @@ fun NovaToolsSheet(
                                 .pointerInput(Unit) {
                                     detectVerticalDragGestures(
                                         onVerticalDrag = { change, dragAmount ->
-                                            if (dragAmount > 0 || dragOffsetY > 0) {
+                                            if (dragAmount > 0 || dragOffsetAnim.value > 0) {
                                                 change.consume()
-                                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                                coroutineScope.launch {
+                                                    dragOffsetAnim.snapTo((dragOffsetAnim.value + dragAmount).coerceAtLeast(0f))
+                                                }
                                             }
                                         },
                                         onDragEnd = {
                                             val dismissThresholdPx = with(density) { 70.dp.toPx() }
-                                            if (dragOffsetY > dismissThresholdPx) {
-                                                onDismiss()
+                                            coroutineScope.launch {
+                                                if (dragOffsetAnim.value > dismissThresholdPx) {
+                                                    onDismiss()
+                                                } else {
+                                                    dragOffsetAnim.animateTo(
+                                                        targetValue = 0f,
+                                                        animationSpec = spring(
+                                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                                            stiffness = Spring.StiffnessMedium
+                                                        )
+                                                    )
+                                                }
                                             }
-                                            dragOffsetY = 0f
                                         },
                                         onDragCancel = {
-                                            dragOffsetY = 0f
+                                            coroutineScope.launch {
+                                                dragOffsetAnim.animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMedium
+                                                    )
+                                                )
+                                            }
                                         }
                                     )
                                 }

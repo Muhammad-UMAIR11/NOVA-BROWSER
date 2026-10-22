@@ -74,6 +74,7 @@ import com.example.videobrowser.ui.glass.GlassTokens
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionDurations
 import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.motionSpring
 import com.example.videobrowser.ui.motion.motionTween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -255,6 +256,7 @@ private fun GroupedVideoItemCard(
     val isNowPlaying = group.isPlaying
     var isQualityMenuExpanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val isReducedMotion = LocalReducedMotion.current
 
     val cardBorder = if (isNowPlaying) {
         BorderStroke(1.5.dp, Color(0xFF10B981))
@@ -472,8 +474,10 @@ private fun GroupedVideoItemCard(
                         val isSelected = option.id == (activeQuality?.id ?: group.qualities.firstOrNull()?.id)
                         AnimatedVisibility(
                             visible = true,
-                            enter = fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = index * 35)) +
-                                scaleIn(initialScale = 0.88f, animationSpec = tween(durationMillis = 200, delayMillis = index * 35))
+                            enter = if (isReducedMotion) fadeIn(animationSpec = androidx.compose.animation.core.snap()) else (
+                                fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = (index * 25).coerceAtMost(150), easing = MotionEasing.EmphasizedDecelerate)) +
+                                    scaleIn(initialScale = 0.92f, animationSpec = tween(durationMillis = 180, delayMillis = (index * 25).coerceAtMost(150), easing = MotionEasing.EmphasizedDecelerate))
+                            )
                         ) {
                             QualityChip(
                                 option = option,
@@ -524,8 +528,10 @@ private fun GroupedVideoItemCard(
                             AnimatedContent(
                                 targetState = activeQuality,
                                 transitionSpec = {
-                                    (slideInVertically(animationSpec = tween(180)) { height -> height / 3 } + fadeIn(animationSpec = tween(180))) togetherWith
-                                        (slideOutVertically(animationSpec = tween(150)) { height -> -height / 3 } + fadeOut(animationSpec = tween(150)))
+                                    (slideInVertically(animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)) { height -> height / 3 } +
+                                        fadeIn(animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion))) togetherWith
+                                        (slideOutVertically(animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) { height -> -height / 3 } +
+                                            fadeOut(animationSpec = motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)))
                                 },
                                 label = "activeQualityHeaderTransition",
                                 modifier = Modifier.weight(1f)
@@ -570,8 +576,10 @@ private fun GroupedVideoItemCard(
                         // Expandable Qualities List
                         AnimatedVisibility(
                             visible = isQualityMenuExpanded,
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically()
+                            enter = fadeIn(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)) +
+                                expandVertically(animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)),
+                            exit = fadeOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) +
+                                shrinkVertically(animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -673,7 +681,6 @@ private fun GroupedVideoItemCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Action Buttons (Preview and Download) with animated button state transitions
-            val isReducedMotion = LocalReducedMotion.current
             val isAudioSelected = activeQuality?.isAudioOnly == true
 
             val downloadButtonContainerColor by animateColorAsState(
@@ -696,7 +703,7 @@ private fun GroupedVideoItemCard(
             )
             val downloadButtonScale by animateFloatAsState(
                 targetValue = if (isDownloadable && !isReducedMotion) 1f else 0.98f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
                 label = "downloadButtonScale"
             )
 
@@ -750,8 +757,8 @@ private fun GroupedVideoItemCard(
                     AnimatedContent(
                         targetState = Triple(isDownloadable, isAudioSelected, activeQuality?.id),
                         transitionSpec = {
-                            (scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(140))) togetherWith
-                                (scaleOut() + fadeOut(tween(120)))
+                            (scaleIn(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) + fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion))) togetherWith
+                                (scaleOut() + fadeOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)))
                         },
                         label = "downloadButtonIconTransition"
                     ) { (downloadable, isAudio, _) ->
@@ -804,8 +811,10 @@ private fun GroupedVideoItemCard(
                     AnimatedContent(
                         targetState = buttonLabel,
                         transitionSpec = {
-                            (slideInVertically(animationSpec = tween(180)) { height -> height / 2 } + fadeIn(animationSpec = tween(180))) togetherWith
-                                (slideOutVertically(animationSpec = tween(150)) { height -> -height / 2 } + fadeOut(animationSpec = tween(150)))
+                            (slideInVertically(animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)) { height -> height / 2 } +
+                                fadeIn(animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion))) togetherWith
+                                (slideOutVertically(animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) { height -> -height / 2 } +
+                                    fadeOut(animationSpec = motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)))
                         },
                         label = "downloadButtonLabelTransition"
                     ) { text ->
@@ -837,7 +846,7 @@ private fun QualityChip(
 
     val chipScale by animateFloatAsState(
         targetValue = if (isSelected && !isReducedMotion) 1.05f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
         label = "chipScale_${option.id}"
     )
 
@@ -865,6 +874,7 @@ private fun QualityChip(
 
     val chipBorderWidth by animateDpAsState(
         targetValue = if (isSelected) 1.5.dp else 1.dp,
+        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
         label = "chipBorderWidth_${option.id}"
     )
 
@@ -887,8 +897,10 @@ private fun QualityChip(
             // Animated selection checkmark indicator
             AnimatedVisibility(
                 visible = isSelected,
-                enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                exit = scaleOut() + fadeOut()
+                enter = scaleIn(motionSpring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium, isReducedMotion = isReducedMotion)) +
+                    fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+                exit = scaleOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) +
+                    fadeOut(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion))
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -964,8 +976,8 @@ private fun QualityOptionRow(
     val isAudio = option.isAudioOnly
 
     val rowScale by animateFloatAsState(
-        targetValue = if (isSelected && !isReducedMotion) 1.015f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        targetValue = if (isSelected && !isReducedMotion) 1.01f else 1.0f,
+        animationSpec = motionSpring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium, isReducedMotion = isReducedMotion),
         label = "rowScale_${option.id}"
     )
 
@@ -1097,8 +1109,10 @@ private fun QualityOptionRow(
             AnimatedContent(
                 targetState = isSelected,
                 transitionSpec = {
-                    (scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn()) togetherWith
-                        (scaleOut() + fadeOut())
+                    (scaleIn(motionSpring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium, isReducedMotion = isReducedMotion)) +
+                        fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion))) togetherWith
+                    (scaleOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) +
+                        fadeOut(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)))
                 },
                 label = "selectionIndicator_${option.id}"
             ) { selected ->

@@ -1,6 +1,10 @@
 package com.example.videobrowser.ui.glass
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -45,8 +49,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -74,6 +82,8 @@ import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MenuMotionSpecs
 import com.example.videobrowser.ui.motion.MotionDurations
 import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.iosPressEffect
+import com.example.videobrowser.ui.motion.motionIosSpring
 import com.example.videobrowser.ui.motion.motionTween
 import kotlin.math.roundToInt
 
@@ -154,19 +164,20 @@ fun GlassBottomSheet(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val isReducedMotion = LocalReducedMotion.current
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val dragOffsetAnim = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
     LaunchedEffect(visible) {
         if (!visible) {
-            dragOffsetY = 0f
+            dragOffsetAnim.snapTo(0f)
         }
     }
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
-        exit = fadeOut(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+        enter = fadeIn(motionTween(MotionDurations.Medium, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)),
+        exit = fadeOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)),
         modifier = modifier.fillMaxSize()
     ) {
         Box(
@@ -187,26 +198,22 @@ fun GlassBottomSheet(
                     )
             )
 
-            // Floating Translucent Glass Panel
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)) +
-                    slideInVertically(
-                        initialOffsetY = { if (isReducedMotion) 0 else (it * 0.25f).toInt() },
-                        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)
-                    ) +
-                    scaleIn(
-                        initialScale = if (isReducedMotion) 1f else 0.94f,
-                        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)
-                    ),
-                exit = fadeOut(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)) +
-                    slideOutVertically(
-                        targetOffsetY = { if (isReducedMotion) 0 else (it * 0.25f).toInt() },
-                        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
-                    ) +
-                    scaleOut(
-                        targetScale = if (isReducedMotion) 1f else 0.94f,
-                        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+            // Floating Translucent Glass Panel with coordinated enter/exit
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(maxHeightFraction)
+                    .animateEnterExit(
+                        enter = slideInVertically(
+                            initialOffsetY = { if (isReducedMotion) 0 else it },
+                            animationSpec = motionIosSpring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow, isReducedMotion = isReducedMotion)
+                        ) + fadeIn(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)),
+                        exit = slideOutVertically(
+                            targetOffsetY = { if (isReducedMotion) 0 else it },
+                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+                        ) + fadeOut(
+                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+                        )
                     )
             ) {
                 val panelShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
@@ -214,8 +221,8 @@ fun GlassBottomSheet(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(maxHeightFraction)
-                        .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+                        .fillMaxHeight()
+                        .offset { IntOffset(0, dragOffsetAnim.value.roundToInt()) }
                         .shadow(
                             elevation = 28.dp,
                             shape = panelShape,
@@ -249,20 +256,39 @@ fun GlassBottomSheet(
                                 .pointerInput(Unit) {
                                     detectVerticalDragGestures(
                                         onVerticalDrag = { change, dragAmount ->
-                                            if (dragAmount > 0 || dragOffsetY > 0) {
+                                            if (dragAmount > 0 || dragOffsetAnim.value > 0) {
                                                 change.consume()
-                                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                                coroutineScope.launch {
+                                                    dragOffsetAnim.snapTo((dragOffsetAnim.value + dragAmount).coerceAtLeast(0f))
+                                                }
                                             }
                                         },
                                         onDragEnd = {
                                             val dismissThresholdPx = with(density) { 65.dp.toPx() }
-                                            if (dragOffsetY > dismissThresholdPx) {
-                                                onDismiss()
+                                            coroutineScope.launch {
+                                                if (dragOffsetAnim.value > dismissThresholdPx) {
+                                                    onDismiss()
+                                                } else {
+                                                    dragOffsetAnim.animateTo(
+                                                        targetValue = 0f,
+                                                        animationSpec = spring(
+                                                            dampingRatio = 0.80f, // iOS rubber-band spring recovery
+                                                            stiffness = Spring.StiffnessMediumLow
+                                                        )
+                                                    )
+                                                }
                                             }
-                                            dragOffsetY = 0f
                                         },
                                         onDragCancel = {
-                                            dragOffsetY = 0f
+                                            coroutineScope.launch {
+                                                dragOffsetAnim.animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = 0.80f, // iOS rubber-band spring recovery
+                                                        stiffness = Spring.StiffnessMediumLow
+                                                    )
+                                                )
+                                            }
                                         }
                                     )
                                 }
@@ -363,6 +389,8 @@ fun GlassBottomSheet(
 
 /**
  * Reusable Frosted Glass Card for grouping secondary options, tiles, and rows.
+ * Features iOS tactile spring depression on tap (0.97 scale with elastic release)
+ * and GPU-accelerated rendering on RenderNode.
  */
 @Composable
 fun GlassCard(
@@ -373,12 +401,20 @@ fun GlassCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val isReducedMotion = LocalReducedMotion.current
+    val interactionSource = remember { MutableInteractionSource() }
     val clickableModifier = if (onClick != null) {
-        Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = ripple(),
-            onClick = onClick
-        )
+        Modifier
+            .iosPressEffect(
+                pressedScale = 0.97f,
+                interactionSource = interactionSource,
+                isReducedMotion = isReducedMotion
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = onClick
+            )
     } else {
         Modifier
     }
@@ -423,12 +459,17 @@ fun GlassDialog(
                     .testTag("${testTag}_scrim"),
                 contentAlignment = Alignment.Center
             ) {
-                // Frosted backdrop scrim
+                // Smooth frosted backdrop scrim
+                val scrimAlpha by animateFloatAsState(
+                    targetValue = 1f,
+                    animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.Standard, isReducedMotion = isReducedMotion),
+                    label = "dialogScrimAlpha"
+                )
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(GlassTokens.GlassScrim)
-                        .blur(14.dp)
+                        .background(GlassTokens.GlassScrim.copy(alpha = GlassTokens.GlassScrim.alpha * scrimAlpha))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -438,23 +479,15 @@ fun GlassDialog(
 
                 AnimatedVisibility(
                     visible = visible,
-                    enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)) +
+                    enter = fadeIn(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)) +
                         scaleIn(
-                            initialScale = if (isReducedMotion) 1f else 0.93f,
-                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)
-                        ) +
-                        slideInVertically(
-                            initialOffsetY = { if (isReducedMotion) 0 else (it * 0.08f).toInt() },
-                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)
+                            initialScale = if (isReducedMotion) 1f else 0.92f,
+                            animationSpec = motionIosSpring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMedium, isReducedMotion = isReducedMotion)
                         ),
-                    exit = fadeOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)) +
+                    exit = fadeOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) +
                         scaleOut(
-                            targetScale = if (isReducedMotion) 1f else 0.93f,
-                            animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
-                        ) +
-                        slideOutVertically(
-                            targetOffsetY = { if (isReducedMotion) 0 else (it * 0.08f).toInt() },
-                            animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
+                            targetScale = if (isReducedMotion) 1f else 0.95f,
+                            animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)
                         )
                 ) {
                     val dialogShape = RoundedCornerShape(26.dp)
@@ -505,8 +538,22 @@ fun GlassDropdownPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val isReducedMotion = LocalReducedMotion.current
+    var isShown by remember { mutableStateOf(expanded) }
 
-    if (expanded) {
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            isShown = true
+        } else if (isShown) {
+            if (isReducedMotion) {
+                isShown = false
+            } else {
+                delay(MotionDurations.Fast.toLong())
+                isShown = false
+            }
+        }
+    }
+
+    if (isShown) {
         Popup(
             alignment = Alignment.TopEnd,
             offset = IntOffset(offset.x.value.toInt(), offset.y.value.toInt()),

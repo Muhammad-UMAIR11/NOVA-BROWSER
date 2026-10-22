@@ -82,26 +82,29 @@ object WebViewCacheManager {
     /**
      * In containerized and virtualized emulator environments lacking Linux DRM render nodes (/dev/dri/renderD128),
      * Mesa's OpenGL driver attempts to open the render node and outputs:
-     *   "E/MESA : Failed to open rendernode: No such file or directory"
+     *   "E/platform: Failed to open rendernode: No such file or directory"
      * By setting LIBGL_ALWAYS_SOFTWARE=1, MESA_LOADER_DRIVER_OVERRIDE=swrast, and EGL_LOG_LEVEL=fatal
      * before EGL loads, Mesa switches to software rasterization directly without probing the nonexistent rendernode.
      */
     fun configureGraphicsEnvironment() {
         try {
-            val renderNode = File("/dev/dri/renderD128")
-            val hasRenderNode = try {
-                renderNode.exists() || (File("/dev/dri").listFiles()?.any { it.name.startsWith("renderD") } == true)
+            val drmAvailable = try {
+                File("/dev/dri/renderD128").exists() || File("/dev/dri").exists()
             } catch (_: Throwable) {
                 false
             }
 
-            if (!hasRenderNode) {
+            if (!drmAvailable) {
+                // In headless, containerized, or virtualized environments without DRM render nodes,
+                // instruct Mesa to use the swrast software rasterizer directly to avoid probing /dev/dri/renderD128
                 android.system.Os.setenv("LIBGL_ALWAYS_SOFTWARE", "1", true)
                 android.system.Os.setenv("MESA_LOADER_DRIVER_OVERRIDE", "swrast", true)
-                android.system.Os.setenv("EGL_LOG_LEVEL", "fatal", true)
-                android.system.Os.setenv("MESA_DEBUG", "0", true)
-                android.system.Os.setenv("MESA_NO_ERROR", "1", true)
+            } else {
+                android.system.Os.unsetenv("MESA_LOADER_DRIVER_OVERRIDE")
+                android.system.Os.unsetenv("LIBGL_ALWAYS_SOFTWARE")
             }
+            android.system.Os.setenv("EGL_LOG_LEVEL", "fatal", true)
+            android.system.Os.setenv("MESA_NO_ERROR", "1", true)
         } catch (e: Throwable) {
             Log.w(TAG, "Graphics environment configuration skipped: ${e.message}")
         }

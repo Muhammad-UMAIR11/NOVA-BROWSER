@@ -65,6 +65,47 @@ object MotionEasing {
  */
 object MotionSprings {
     /**
+     * iOS fluid spring: natural physical momentum with tactile elasticity (dampingRatio = 0.82f).
+     * Matches iOS UIKit / SwiftUI default spring curve (.spring(response: 0.36, dampingRatio: 0.82)).
+     */
+    fun <T> iosFluid() = spring<T>(
+        dampingRatio = 0.82f,
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    /**
+     * iOS snappy spring: ultra-responsive press feedback with swift settling (dampingRatio = 0.88f).
+     */
+    fun <T> iosSnappy() = spring<T>(
+        dampingRatio = 0.88f,
+        stiffness = Spring.StiffnessMedium
+    )
+
+    /**
+     * iOS bouncy spring: playful tactile bounce for badges, toggles, and icon reactions (dampingRatio = 0.72f).
+     */
+    fun <T> iosBouncy() = spring<T>(
+        dampingRatio = 0.72f,
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    /**
+     * iOS sheet spring: smooth deceleration curve for bottom sheets and modal presentations (dampingRatio = 0.85f).
+     */
+    fun <T> iosSheet() = spring<T>(
+        dampingRatio = 0.85f,
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    /**
+     * iOS rubber-band spring: elastic recovery for overscroll and gesture release (dampingRatio = 0.76f).
+     */
+    fun <T> iosRubberBand() = spring<T>(
+        dampingRatio = 0.76f,
+        stiffness = Spring.StiffnessLow
+    )
+
+    /**
      * Crisp spring with zero bounce (critically damped) for fast UI state transitions.
      */
     fun <T> crisp() = spring<T>(

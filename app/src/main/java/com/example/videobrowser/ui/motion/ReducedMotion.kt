@@ -5,6 +5,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.SnapSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.TweenSpec
@@ -120,7 +121,23 @@ fun <T> motionSpring(
     dampingRatio: Float = Spring.DampingRatioNoBouncy,
     stiffness: Float = Spring.StiffnessMedium,
     isReducedMotion: Boolean = false
-): AnimationSpec<T> {
+): FiniteAnimationSpec<T> {
+    return if (isReducedMotion) {
+        snap()
+    } else {
+        spring(dampingRatio = dampingRatio, stiffness = stiffness)
+    }
+}
+
+/**
+ * Creates an iOS-tuned spring animation spec (dampingRatio = 0.82f, stiffness = MediumLow)
+ * respecting the reduced motion setting.
+ */
+fun <T> motionIosSpring(
+    dampingRatio: Float = 0.82f,
+    stiffness: Float = Spring.StiffnessMediumLow,
+    isReducedMotion: Boolean = false
+): FiniteAnimationSpec<T> {
     return if (isReducedMotion) {
         snap()
     } else {

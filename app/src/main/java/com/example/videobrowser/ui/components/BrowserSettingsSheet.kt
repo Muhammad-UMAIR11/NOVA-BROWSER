@@ -37,6 +37,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -44,6 +47,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
@@ -106,6 +112,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -129,6 +136,8 @@ import com.example.videobrowser.ui.components.settings.ThemeJsonDialog
 import com.example.videobrowser.ui.glass.GlassBottomSheet
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.motionSpring
 import com.example.videobrowser.ui.motion.motionTween
 import com.example.videobrowser.viewmodel.BrowserViewModel
 import kotlin.math.roundToInt
@@ -138,6 +147,7 @@ private enum class SettingsCategory(val title: String, val icon: ImageVector) {
     TYPOGRAPHY("Typography", Icons.Default.FontDownload),
     SEARCH("Search", Icons.Default.Search),
     APPEARANCE("Appearance", Icons.Default.Tune),
+    PERFORMANCE("Performance", Icons.Default.Speed),
     PRIVACY("Privacy & Disk", Icons.Default.Security)
 }
 
@@ -229,12 +239,13 @@ fun BrowserSettingsSheet(
     val blockCookies = uiState?.blockCookies ?: true
     val strictPopups = uiState?.strictPopups ?: true
     val hardwareAccel = uiState?.hardwareAccel ?: true
+    val lowEndMode = uiState?.lowEndMode ?: false
     val adBlockerActive = uiState?.isAdBlockerEnabled ?: isAdBlockerActive
 
     GlassBottomSheet(
         visible = visible,
         onDismiss = onDismiss,
-        title = "Nova Customization Center",
+        title = "Nova Settings",
         subtitle = "Themes, Typography, Search & Appearance",
         icon = Icons.Default.Palette,
         testTag = "settings_bottom_sheet"
@@ -247,8 +258,10 @@ fun BrowserSettingsSheet(
             // Live Floating Notification Banner
             AnimatedVisibility(
                 visible = appliedNoticeText != null,
-                enter = fadeIn(tween(160)) + slideInVertically(tween(180)) { -it / 2 },
-                exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { -it / 2 },
+                enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)) +
+                    slideInVertically(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)) { -it / 2 },
+                exit = fadeOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)) +
+                    slideOutVertically(motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) { -it / 2 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 6.dp)
@@ -466,6 +479,33 @@ fun BrowserSettingsSheet(
                             onResetAdvanced = {
                                 viewModel?.resetAdvancedSettings()
                                 appliedNoticeText = "Appearance reset to defaults"
+                            }
+                        )
+                    }
+
+                    SettingsCategory.PERFORMANCE -> {
+                        PerformanceTabContent(
+                            lowEndMode = lowEndMode,
+                            hardwareAccel = hardwareAccel,
+                            animationIntensity = animationIntensity,
+                            onToggleLowEndMode = { v ->
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel?.setLowEndMode(v)
+                                appliedNoticeText = if (v) "⚡ Low-End Mode: Optimizations Active" else "Standard Visuals Restored"
+                            },
+                            onToggleHardwareAccel = { v ->
+                                viewModel?.setHardwareAccel(v)
+                                appliedNoticeText = if (v) "GPU Acceleration Enabled" else "Software Rendering Layer"
+                            },
+                            onSelectAnimationIntensity = { intensity ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel?.setAnimationIntensity(intensity)
+                                appliedNoticeText = "Motion profile: ${intensity.displayName}"
+                            },
+                            onOptimizeMemory = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel?.optimizeMemoryAndPurgeCache()
+                                appliedNoticeText = "Memory optimized & temporary cache purged"
                             }
                         )
                     }
@@ -814,7 +854,7 @@ private fun ThemePreviewCard(
     val isReducedMotion = LocalReducedMotion.current
     val cardScale by animateFloatAsState(
         targetValue = if (isSelected && !isReducedMotion) 1.015f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
         label = "themeScale_${theme.id}"
     )
 
@@ -1865,8 +1905,8 @@ private fun SettingsCheckboxItem(
 ) {
     val isReducedMotion = LocalReducedMotion.current
     val checkScale by animateFloatAsState(
-        targetValue = if (checked && !isReducedMotion) 1.08f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        targetValue = 1.0f,
+        animationSpec = motionSpring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium, isReducedMotion = isReducedMotion),
         label = "chkScale"
     )
 
@@ -1899,8 +1939,8 @@ private fun SettingsCheckboxItem(
             ) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = checked,
-                    enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(tween(120)),
-                    exit = scaleOut(tween(90)) + fadeOut(tween(90))
+                    enter = scaleIn(motionSpring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium, isReducedMotion = isReducedMotion)) + fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+                    exit = scaleOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion)) + fadeOut(motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
@@ -1926,6 +1966,346 @@ private fun SettingsCheckboxItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     fontSize = 11.5.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PerformanceTabContent(
+    lowEndMode: Boolean,
+    hardwareAccel: Boolean,
+    animationIntensity: AnimationIntensity,
+    onToggleLowEndMode: (Boolean) -> Unit,
+    onToggleHardwareAccel: (Boolean) -> Unit,
+    onSelectAnimationIntensity: (AnimationIntensity) -> Unit,
+    onOptimizeMemory: () -> Unit
+) {
+    val context = LocalContext.current
+    val activityManager = remember(context) {
+        context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+    }
+    val isLowRamDevice = remember(activityManager) {
+        activityManager?.isLowRamDevice == true
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Hero Performance Card
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (lowEndMode) {
+                Color(0xFF064E3B).copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            },
+            border = BorderStroke(
+                1.5.dp,
+                if (lowEndMode) Color(0xFF10B981) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("low_end_mode_hero_card")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (lowEndMode) Color(0xFF10B981) else MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Speed,
+                                    contentDescription = null,
+                                    tint = if (lowEndMode) Color(0xFF022C22) else MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Low-End Device Mode",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (lowEndMode) Color(0xFF10B981).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (lowEndMode) "⚡ Optimizations Active" else "Standard Mode",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (lowEndMode) Color(0xFF34D399) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Switch(
+                        checked = lowEndMode,
+                        onCheckedChange = onToggleLowEndMode,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF022C22),
+                            checkedTrackColor = Color(0xFF10B981)
+                        ),
+                        modifier = Modifier.testTag("low_end_mode_switch")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Engineered specifically for budget devices, low-RAM hardware, and containerized emulators. Bypasses GPU render node probing to prevent Chromium renderer crashes and reduces memory consumption.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Automated Optimizations When Enabled:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val features = listOf(
+                    "Software Render Layer Fallback: Eliminates Mesa rendernode probe errors and prevents Chromium renderer crashes",
+                    "Offscreen Pre-Raster Disabled: Prevents WebView from pre-rendering hidden tiles, saving memory",
+                    "Gesture-Gated Media Playback: Stops unsolicited background videos from consuming CPU",
+                    "Opaque UI Fast Path: Replaces real-time Gaussian glass blurs with snappy 98% opaque panels",
+                    "Lightweight Shaders: Disables particle physics and background firefly animations",
+                    "Reduced Motion Profile: Bypasses bouncy spring interpolators for snappy zero-lag navigation"
+                )
+
+                features.forEach { feature ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (lowEndMode) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .padding(top = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = feature,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Manual Tuning Section
+        Text(
+            text = "Fine-Tuning & Graphics",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsCheckboxItem(
+            checked = hardwareAccel,
+            onCheckedChange = onToggleHardwareAccel,
+            title = "Hardware Acceleration",
+            subtitle = if (lowEndMode) "Auto-managed by Low-End Mode (Software layer active for stability)" else "Uses device GPU hardware for web rendering"
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Motion Intensity Preference
+        Text(
+            text = "Motion & Transition Profile",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Select UI transition intensity. 'Reduced' is optimal for battery and low-spec processors.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AnimationIntensity.entries.forEach { intensity ->
+                val isSelected = animationIntensity == intensity
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelectAnimationIntensity(intensity) }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = intensity.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = when (intensity) {
+                                AnimationIntensity.REDUCED -> "Fastest"
+                                AnimationIntensity.BALANCED -> "Standard"
+                                AnimationIntensity.SMOOTH -> "Fluid"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Device Diagnostics & RAM Optimization Card
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Memory,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Device & Memory Diagnostics",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "System Low-RAM Device:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (isLowRamDevice) "Yes (Optimizations Recommended)" else "No (Sufficient RAM)",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isLowRamDevice) Color(0xFFF59E0B) else Color(0xFF10B981)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Device Model / Hardware:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${Build.MODEL} (${Build.HARDWARE})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                var isOptimizing by remember { mutableStateOf(false) }
+                LaunchedEffect(isOptimizing) {
+                    if (isOptimizing) {
+                        kotlinx.coroutines.delay(650)
+                        isOptimizing = false
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        isOptimizing = true
+                        onOptimizeMemory()
+                    },
+                    enabled = !isOptimizing,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("optimize_ram_button")
+                ) {
+                    if (isOptimizing) {
+                        AsyncOperationProgressIndicator(
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reclaiming Memory…", fontSize = 12.sp)
+                    } else {
+                        Icon(imageVector = Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reclaim RAM & Clean Temp Cache", fontSize = 12.sp)
+                    }
+                }
             }
         }
     }

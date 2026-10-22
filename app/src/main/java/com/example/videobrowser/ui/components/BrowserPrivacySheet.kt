@@ -44,8 +44,11 @@ fun BrowserPrivacySheet(
     pageUrl: String?,
     isAdBlockerActive: Boolean,
     blockedAdsOnPage: Int,
+    blockedTrackersOnPage: Int = 0,
     totalBlockedAds: Int,
+    blockCookies: Boolean = true,
     onToggleAdBlocker: () -> Unit,
+    onToggleBlockCookies: (Boolean) -> Unit = {},
     onClearCache: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -156,20 +159,80 @@ fun BrowserPrivacySheet(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Stats Grid
+                // Stats Grid with clear separation of Ads vs Trackers
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StatBox(
-                        title = "Blocked on Page",
+                        title = "Ads Blocked",
                         value = "$blockedAdsOnPage",
                         modifier = Modifier.weight(1f)
                     )
                     StatBox(
-                        title = "Lifetime Blocked",
+                        title = "Trackers",
+                        value = "$blockedTrackersOnPage",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatBox(
+                        title = "Lifetime Total",
                         value = "$totalBlockedAds",
                         modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 3. Third-Party Tracking Cookie Guard Card
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0x3338BDF8),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Third-Party Cookie Guard",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = GlassTokens.TextPrimary
+                            )
+                            Text(
+                                text = if (blockCookies) "Blocking tracking cookies (essential login preserved)" else "Allowing third-party cross-site cookies",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (blockCookies) Color(0xFF38BDF8) else GlassTokens.TextMuted
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = blockCookies,
+                        onCheckedChange = { onToggleBlockCookies(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF0F172A),
+                            checkedTrackColor = Color(0xFF38BDF8),
+                            uncheckedThumbColor = GlassTokens.TextSecondary,
+                            uncheckedTrackColor = Color(0x401E293B)
+                        ),
+                        modifier = Modifier.testTag("privacy_cookie_switch")
                     )
                 }
             }

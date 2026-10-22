@@ -103,10 +103,14 @@ class MediaBridge(private val listener: MediaDetectionListener) {
         }
     }
 
+    private val recentlyReportedUrls = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+
     @JavascriptInterface
     fun onStreamUrlDetected(url: String, type: String, pageTitle: String) {
         try {
             if (url.isNotBlank() && !url.startsWith("blob:") && !url.startsWith("data:")) {
+                if (!recentlyReportedUrls.add(url)) return
+                if (recentlyReportedUrls.size > 300) recentlyReportedUrls.clear()
                 listener.onDomVideoFound(
                     mediaUrl = url,
                     pageUrl = "",
@@ -279,10 +283,14 @@ object WebMediaInjector {
 
             // Sniff XHR and fetch for media stream URLs (.m3u8, .mpd, .mp4, .webm, manifests, etc.)
             var streamRegex = /\.(m3u8|mpd|mp4|webm|m4v|mov|mkv)(\?|$)|(\/video\/|videoplayback|playlist\.m3u8|master\.m3u8|\/manifest|\.ts(\?|$)|mime=video)/i;
+            var reportedUrls = new Set();
 
             function checkAndReportStreamUrl(url) {
                 if (!url || typeof url !== 'string') return;
                 if (url.indexOf('blob:') === 0 || url.indexOf('data:') === 0) return;
+                if (reportedUrls.has(url)) return;
+                if (reportedUrls.size > 250) reportedUrls.clear();
+                reportedUrls.add(url);
                 if (streamRegex.test(url)) {
                     if (window.AndroidMediaBridge && window.AndroidMediaBridge.onStreamUrlDetected) {
                         window.AndroidMediaBridge.onStreamUrlDetected(url, '', document.title || '');

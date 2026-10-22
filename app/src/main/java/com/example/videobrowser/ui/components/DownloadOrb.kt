@@ -12,6 +12,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
+import com.example.videobrowser.ui.motion.MotionTransitions
+import com.example.videobrowser.ui.motion.iosPressEffect
+import com.example.videobrowser.ui.motion.motionTween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,34 +68,44 @@ fun DownloadOrb(
     modifier: Modifier = Modifier,
     orbStatus: OrbStatus = if (detectedCount > 0) OrbStatus.SUPPORTED_FOUND else OrbStatus.HIDDEN
 ) {
+    val isReducedMotion = LocalReducedMotion.current
     val isActuallyVisible = visible && orbStatus != OrbStatus.HIDDEN
 
     AnimatedVisibility(
         visible = isActuallyVisible,
-        enter = scaleIn(animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow)) + fadeIn(animationSpec = tween(250)),
-        exit = scaleOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(180)),
+        enter = MotionTransitions.scaleFadeIn(isReducedMotion, initialScale = 0.88f, durationMillis = MotionDurations.Fast),
+        exit = MotionTransitions.scaleFadeOut(isReducedMotion, targetScale = 0.88f, durationMillis = MotionDurations.Micro),
         modifier = modifier
     ) {
-        // Infinite transition for subtle pulse when active
-        val infiniteTransition = rememberInfiniteTransition(label = "orbPulse")
-        val pulseScale by infiniteTransition.animateFloat(
-            initialValue = 1.0f,
-            targetValue = if (isPlaying) 1.12f else 1.06f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulseScale"
-        )
-        val pulseAlpha by infiniteTransition.animateFloat(
-            initialValue = 0.5f,
-            targetValue = 0.1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulseAlpha"
-        )
+        val pulseScale: Float
+        val pulseAlpha: Float
+        if (isReducedMotion) {
+            pulseScale = 1.0f
+            pulseAlpha = 0.35f
+        } else {
+            // Infinite transition for subtle pulse when active
+            val infiniteTransition = rememberInfiniteTransition(label = "orbPulse")
+            val animatedScale by infiniteTransition.animateFloat(
+                initialValue = 1.0f,
+                targetValue = if (isPlaying) 1.10f else 1.05f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1200, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "pulseScale"
+            )
+            val animatedAlpha by infiniteTransition.animateFloat(
+                initialValue = 0.45f,
+                targetValue = 0.12f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1200, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "pulseAlpha"
+            )
+            pulseScale = animatedScale
+            pulseAlpha = animatedAlpha
+        }
 
         val (gradientColors, iconVector, badgeColor) = when (orbStatus) {
             OrbStatus.UNSUPPORTED_MEDIA -> Triple(
@@ -132,11 +149,14 @@ fun DownloadOrb(
                 .semantics { contentDescription = "Video Download Orb, $detectedCount videos available, status: $orbStatus" }
                 .testTag("download_orb_button")
         ) {
-            // Pulsing outer ripple glow
+            // Pulsing outer ripple glow (GPU RenderNode transform)
             Box(
                 modifier = Modifier
                     .size(62.dp)
-                    .scale(pulseScale)
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                    }
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
@@ -148,7 +168,7 @@ fun DownloadOrb(
                     )
             )
 
-            // Main Orb Body
+            // Main Orb Body with iOS tactile spring press
             Surface(
                 shape = CircleShape,
                 color = Color.Transparent,
@@ -156,6 +176,7 @@ fun DownloadOrb(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
+                    .iosPressEffect(pressedScale = 0.90f, isReducedMotion = isReducedMotion)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = true, color = Color.White),
@@ -184,8 +205,8 @@ fun DownloadOrb(
             // Count Badge with smooth roll transition
             AnimatedVisibility(
                 visible = detectedCount > 0,
-                enter = scaleIn(androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                exit = scaleOut() + fadeOut(),
+                enter = MotionTransitions.scaleFadeIn(isReducedMotion, initialScale = 0.8f, durationMillis = MotionDurations.Fast),
+                exit = MotionTransitions.scaleFadeOut(isReducedMotion, targetScale = 0.8f, durationMillis = MotionDurations.Fast),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .offset(x = (-4).dp, y = 2.dp)
@@ -201,8 +222,14 @@ fun DownloadOrb(
                     androidx.compose.animation.AnimatedContent(
                         targetState = if (detectedCount > 99) "99+" else "$detectedCount",
                         transitionSpec = {
-                            androidx.compose.animation.slideInVertically { -it } + fadeIn() togetherWith
-                                    androidx.compose.animation.slideOutVertically { it } + fadeOut()
+                            if (isReducedMotion) {
+                                fadeIn(motionTween(0, isReducedMotion = true)) togetherWith fadeOut(motionTween(0, isReducedMotion = true))
+                            } else {
+                                (androidx.compose.animation.slideInVertically(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate)) { -(it * 0.45f).toInt() } +
+                                    fadeIn(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate))) togetherWith
+                                (androidx.compose.animation.slideOutVertically(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate)) { (it * 0.45f).toInt() } +
+                                    fadeOut(motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedAccelerate)))
+                            }
                         },
                         label = "badgeCountRoll"
                     ) { countText ->

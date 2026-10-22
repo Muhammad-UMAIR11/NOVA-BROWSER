@@ -32,6 +32,7 @@ data class DownloadTask(
     val downloadedSegments: Int = 0,
     val totalSegments: Int = 0,
     val isResumable: Boolean = true,
+    val isWaitingForNetwork: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null
 ) {

@@ -757,9 +757,9 @@ private fun DownloadTaskCard(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-                        } else if (task.status == DownloadStatus.PAUSED && task.isPartiallyDownloaded) {
+                        } else if ((task.status == DownloadStatus.PAUSED || task.isWaitingForNetwork) && task.isPartiallyDownloaded) {
                             Text(
-                                text = "Starts at ${task.formattedResumableOffset}",
+                                text = if (task.isWaitingForNetwork) "📶 Auto-resumes from ${task.formattedResumableOffset}" else "Starts at ${task.formattedResumableOffset}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFFF59E0B),
                                 fontWeight = FontWeight.Medium
@@ -818,7 +818,8 @@ private fun DownloadTaskCard(
                 task.errorMessage?.let { errorMsg ->
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = if (task.canResume) Color(0xFFF59E0B).copy(alpha = 0.15f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        color = if (task.canResume || task.isWaitingForNetwork) Color(0xFFF59E0B).copy(alpha = 0.15f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        border = if (task.isWaitingForNetwork) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f)) else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 6.dp)
@@ -828,9 +829,9 @@ private fun DownloadTaskCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (task.canResume) Icons.Default.Sync else Icons.Default.ErrorOutline,
+                                imageVector = if (task.canResume || task.isWaitingForNetwork) Icons.Default.Sync else Icons.Default.ErrorOutline,
                                 contentDescription = null,
-                                tint = if (task.canResume) Color(0xFFF59E0B) else MaterialTheme.colorScheme.error,
+                                tint = if (task.canResume || task.isWaitingForNetwork) Color(0xFFF59E0B) else MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -838,7 +839,7 @@ private fun DownloadTaskCard(
                                 text = errorMsg,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontSize = 11.sp,
-                                color = if (task.canResume) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
+                                color = if (task.canResume || task.isWaitingForNetwork) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }
@@ -1010,19 +1011,21 @@ private fun DownloadTaskCard(
 @Composable
 private fun DownloadStatusBadge(task: DownloadTask) {
     val isReducedMotion = LocalReducedMotion.current
-    val (targetColor, text) = when (task.status) {
-        DownloadStatus.PENDING -> MaterialTheme.colorScheme.outline to "Queued"
-        DownloadStatus.DOWNLOADING -> Color(0xFF0284C7) to "Downloading"
-        DownloadStatus.PAUSED -> Color(0xFFF59E0B) to "Paused"
-        DownloadStatus.COMPLETED -> Color(0xFF10B981) to "Completed"
-        DownloadStatus.FAILED -> {
+    val (targetColor, text) = when {
+        task.isWaitingForNetwork -> Color(0xFFF59E0B) to "Waiting for Network"
+        task.status == DownloadStatus.PENDING -> MaterialTheme.colorScheme.outline to "Queued"
+        task.status == DownloadStatus.DOWNLOADING -> Color(0xFF0284C7) to "Downloading"
+        task.status == DownloadStatus.PAUSED -> Color(0xFFF59E0B) to "Paused"
+        task.status == DownloadStatus.COMPLETED -> Color(0xFF10B981) to "Completed"
+        task.status == DownloadStatus.FAILED -> {
             if (task.isPartiallyDownloaded) {
                 Color(0xFFF97316) to "Interrupted"
             } else {
                 MaterialTheme.colorScheme.error to "Failed"
             }
         }
-        DownloadStatus.CANCELLED -> MaterialTheme.colorScheme.outline to "Cancelled"
+        task.status == DownloadStatus.CANCELLED -> MaterialTheme.colorScheme.outline to "Cancelled"
+        else -> MaterialTheme.colorScheme.outline to "Idle"
     }
 
     val animatedBadgeColor by animateColorAsState(
@@ -1041,7 +1044,7 @@ private fun DownloadStatusBadge(task: DownloadTask) {
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
         ) {
             AnimatedContent(
-                targetState = task.status,
+                targetState = if (task.isWaitingForNetwork) "WAITING" else task.status.name,
                 transitionSpec = {
                     if (isReducedMotion) {
                         fadeIn(motionTween(0, isReducedMotion = true)) togetherWith fadeOut(motionTween(0, isReducedMotion = true))
@@ -1051,9 +1054,20 @@ private fun DownloadStatusBadge(task: DownloadTask) {
                     }
                 },
                 label = "badgeIconTransition_${task.id}"
-            ) { status ->
-                when (status) {
-                    DownloadStatus.COMPLETED -> {
+            ) { badgeKey ->
+                when (badgeKey) {
+                    "WAITING" -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = "Waiting for connection",
+                                tint = animatedBadgeColor,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                        }
+                    }
+                    DownloadStatus.COMPLETED.name -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
@@ -1064,7 +1078,7 @@ private fun DownloadStatusBadge(task: DownloadTask) {
                             Spacer(modifier = Modifier.width(3.dp))
                         }
                     }
-                    DownloadStatus.DOWNLOADING -> {
+                    DownloadStatus.DOWNLOADING.name -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
@@ -1075,7 +1089,7 @@ private fun DownloadStatusBadge(task: DownloadTask) {
                             Spacer(modifier = Modifier.width(4.dp))
                         }
                     }
-                    DownloadStatus.PAUSED -> {
+                    DownloadStatus.PAUSED.name -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Pause,

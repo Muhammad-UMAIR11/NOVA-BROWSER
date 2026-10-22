@@ -70,7 +70,7 @@ class PageMotionState {
                             targetValue = 1.0f,
                             animationSpec = tween(
                                 durationMillis = MotionDurations.Fast,
-                                easing = MotionEasing.Standard
+                                easing = MotionEasing.EmphasizedDecelerate
                             )
                         )
                     }
@@ -98,7 +98,7 @@ class PageMotionState {
                             targetValue = 1.0f,
                             animationSpec = tween(
                                 durationMillis = MotionDurations.Fast,
-                                easing = MotionEasing.Standard
+                                easing = MotionEasing.EmphasizedDecelerate
                             )
                         )
                     }
@@ -135,7 +135,7 @@ class PageMotionState {
                             targetValue = 1.0f,
                             animationSpec = tween(
                                 durationMillis = MotionDurations.Fast,
-                                easing = MotionEasing.Standard
+                                easing = MotionEasing.EmphasizedDecelerate
                             )
                         )
                     }
@@ -152,7 +152,7 @@ class PageMotionState {
                         scale.animateTo(
                             targetValue = 1.0f,
                             animationSpec = tween(
-                                durationMillis = 200,
+                                durationMillis = MotionDurations.Fast,
                                 easing = MotionEasing.EmphasizedDecelerate
                             )
                         )
@@ -161,8 +161,8 @@ class PageMotionState {
                         alpha.animateTo(
                             targetValue = 1.0f,
                             animationSpec = tween(
-                                durationMillis = 200,
-                                easing = MotionEasing.Standard
+                                durationMillis = MotionDurations.Fast,
+                                easing = MotionEasing.EmphasizedDecelerate
                             )
                         )
                     }

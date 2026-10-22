@@ -15,5 +15,7 @@ data class BrowserTab(
     val activePlayingMedia: DetectedMedia? = null,
     val errorMessage: String? = null,
     val isDesktopMode: Boolean = false,
-    val blockedAdsCount: Int = 0
+    val blockedAdsCount: Int = 0,
+    val blockedTrackersCount: Int = 0,
+    val blockedResourcesOnPage: Set<String> = emptySet()
 )

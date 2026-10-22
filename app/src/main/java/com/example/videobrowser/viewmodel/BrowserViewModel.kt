@@ -30,7 +30,9 @@ import com.example.videobrowser.model.theme.AnimationIntensity
 import com.example.videobrowser.model.theme.BrowserTheme
 import com.example.videobrowser.model.theme.UiDensity
 import com.example.videobrowser.data.BrowserSettingsManager
+import com.example.videobrowser.adblock.AdBlockerEngine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -117,6 +119,7 @@ data class BrowserUiState(
     val blockCookies: Boolean = true,
     val strictPopups: Boolean = true,
     val hardwareAccel: Boolean = true,
+    val lowEndMode: Boolean = false,
     val selectedMediaForConfirmation: DetectedMedia? = null,
     val customFileNameInput: String = "",
     val useSystemDownloadManager: Boolean = false,
@@ -129,7 +132,7 @@ data class BrowserUiState(
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
 
     val activeTabBlockedAds: Int
-        get() = activeTab?.blockedAdsCount ?: 0
+        get() = (activeTab?.blockedAdsCount ?: 0) + (activeTab?.blockedTrackersCount ?: 0)
 
     val detectedVideos: List<DetectedMedia>
         get() = activeTab?.detectedMediaList ?: emptyList()
@@ -244,7 +247,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             animationIntensity = settingsManager.getAnimationIntensity(),
             blockCookies = settingsManager.getBlockCookies(),
             strictPopups = settingsManager.getStrictPopups(),
-            hardwareAccel = settingsManager.getHardwareAccel()
+            hardwareAccel = settingsManager.getHardwareAccel(),
+            lowEndMode = settingsManager.getLowEndMode(),
+            totalBlockedAds = settingsManager.getTotalBlockedAds()
         ).let { initial ->
             initial.copy(
                 activeTabId = initial.tabs.first().id,
@@ -401,14 +406,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { state ->
             val updatedTabs = state.tabs.map { tab ->
                 if (tab.id == state.activeTabId) {
+                    val isSamePageNav = tab.url.substringBefore('#') == url.substringBefore('#') && tab.url.isNotBlank() && url.isNotBlank()
                     tab.copy(
                         url = url,
                         isLoading = true,
                         errorMessage = null,
-                        detectedMediaList = emptyList(),
-                        groupedVideos = emptyList(),
-                        activePlayingMedia = null,
-                        blockedAdsCount = 0
+                        detectedMediaList = if (isSamePageNav) tab.detectedMediaList else emptyList(),
+                        groupedVideos = if (isSamePageNav) tab.groupedVideos else emptyList(),
+                        activePlayingMedia = if (isSamePageNav) tab.activePlayingMedia else null,
+                        blockedAdsCount = if (isSamePageNav) tab.blockedAdsCount else 0,
+                        blockedTrackersCount = if (isSamePageNav) tab.blockedTrackersCount else 0,
+                        blockedResourcesOnPage = if (isSamePageNav) tab.blockedResourcesOnPage else emptySet()
                     )
                 } else tab
             }
@@ -881,7 +889,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun clearBrowserCache() {
         viewModelScope.launch(Dispatchers.IO) {
             WebViewCacheManager.clearWebViewDiskCache(getApplication())
-            _uiState.update { it.copy(statusNotice = "Browser disk cache cleaned") }
+            withContext(Dispatchers.Main) {
+                try {
+                    val cookieManager = android.webkit.CookieManager.getInstance()
+                    cookieManager.removeAllCookies(null)
+                    cookieManager.flush()
+                    android.webkit.WebStorage.getInstance().deleteAllData()
+                } catch (_: Exception) {}
+            }
+            _uiState.update { it.copy(statusNotice = "Browser cache & cookies cleaned") }
         }
     }
 
@@ -1096,6 +1112,54 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(hardwareAccel = enabled) }
     }
 
+    fun setLowEndMode(enabled: Boolean) {
+        settingsManager.setLowEndMode(enabled)
+        if (enabled) {
+            settingsManager.setAnimationIntensity(AnimationIntensity.REDUCED)
+            settingsManager.setPanelBlurIntensity(0.0f)
+            settingsManager.setPanelTransparency(0.98f)
+            System.gc()
+            _uiState.update {
+                it.copy(
+                    lowEndMode = true,
+                    animationIntensity = AnimationIntensity.REDUCED,
+                    panelBlurIntensity = 0.0f,
+                    panelTransparency = 0.98f,
+                    statusNotice = "Low-End Device Mode: Optimizations Active"
+                )
+            }
+        } else {
+            settingsManager.setAnimationIntensity(AnimationIntensity.BALANCED)
+            settingsManager.setPanelBlurIntensity(0.80f)
+            settingsManager.setPanelTransparency(0.88f)
+            _uiState.update {
+                it.copy(
+                    lowEndMode = false,
+                    animationIntensity = AnimationIntensity.BALANCED,
+                    panelBlurIntensity = 0.80f,
+                    panelTransparency = 0.88f,
+                    statusNotice = "Standard Visuals Restored"
+                )
+            }
+        }
+    }
+
+    /**
+     * Reclaims memory, flushes inactive resources, and cleans temporary WebView disk cache.
+     * Especially useful on memory-constrained low-end devices.
+     */
+    fun optimizeMemoryAndPurgeCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            WebViewCacheManager.clearWebViewDiskCache(getApplication())
+            withContext(Dispatchers.Main) {
+                try {
+                    System.gc()
+                } catch (_: Exception) {}
+            }
+            _uiState.update { it.copy(statusNotice = "Memory optimized & temporary cache purged") }
+        }
+    }
+
     fun resetThemeAndColors() {
         settingsManager.resetColorsAndThemes()
         _uiState.update {
@@ -1160,6 +1224,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 blockCookies = true,
                 strictPopups = true,
                 hardwareAccel = true,
+                lowEndMode = false,
                 statusNotice = "All settings reset to factory defaults"
             )
         }
@@ -1309,15 +1374,39 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun onAdBlocked(host: String) {
         val activeId = _uiState.value.activeTabId
+        onResourceBlocked(tabId = activeId, resourceKey = host, blockType = AdBlockerEngine.BlockType.AD)
+    }
+
+    fun onResourceBlocked(tabId: String, resourceKey: String, blockType: AdBlockerEngine.BlockType) {
+        if (resourceKey.isBlank()) return
         _uiState.update { current ->
-            current.copy(
-                totalBlockedAds = current.totalBlockedAds + 1,
-                tabs = current.tabs.map { tab ->
-                    if (tab.id == activeId) {
-                        tab.copy(blockedAdsCount = tab.blockedAdsCount + 1)
+            var isNewResourceOnTab = false
+            val updatedTabs = current.tabs.map { tab ->
+                if (tab.id == tabId) {
+                    if (!tab.blockedResourcesOnPage.contains(resourceKey)) {
+                        isNewResourceOnTab = true
+                        val newSet = tab.blockedResourcesOnPage + resourceKey
+                        val newAds = if (blockType == AdBlockerEngine.BlockType.AD) tab.blockedAdsCount + 1 else tab.blockedAdsCount
+                        val newTrackers = if (blockType == AdBlockerEngine.BlockType.TRACKER) tab.blockedTrackersCount + 1 else tab.blockedTrackersCount
+                        tab.copy(
+                            blockedAdsCount = newAds,
+                            blockedTrackersCount = newTrackers,
+                            blockedResourcesOnPage = newSet
+                        )
                     } else tab
-                }
-            )
+                } else tab
+            }
+
+            if (isNewResourceOnTab) {
+                val newTotal = current.totalBlockedAds + 1
+                settingsManager.setTotalBlockedAds(newTotal)
+                current.copy(
+                    totalBlockedAds = newTotal,
+                    tabs = updatedTabs
+                )
+            } else {
+                current.copy(tabs = updatedTabs)
+            }
         }
     }
 

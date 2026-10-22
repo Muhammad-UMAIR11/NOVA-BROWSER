@@ -92,6 +92,7 @@ import com.example.videobrowser.ui.components.TabsSheet
 import com.example.videobrowser.ui.components.WebPageLoadingSkeleton
 import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionEasing
 import com.example.videobrowser.ui.motion.MotionTransitions
 import com.example.videobrowser.ui.motion.motionTween
 import com.example.videobrowser.viewmodel.BrowserViewModel
@@ -157,12 +158,6 @@ fun BrowserScreen(
         uiState.showPrivacySheet ||
         (uiState.selectedMediaForConfirmation != null)
 
-    val contentBlur by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (isAnyOverlayOpen && !isReducedMotion) 16.dp else 0.dp,
-        animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion),
-        label = "contentBlur"
-    )
-
     // System Back Press handling - only enabled when there is navigation or active modal to dismiss
     val isBackHandlerEnabled = isFullscreen ||
         uiState.showDetectionSheet ||
@@ -213,25 +208,19 @@ fun BrowserScreen(
 
     val startupAlpha by animateFloatAsState(
         targetValue = if (isStartupRevealed || isReducedMotion) 1f else 0f,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        animationSpec = motionTween(MotionDurations.Medium, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion),
         label = "startupAlpha"
     )
 
     val startupScale by animateFloatAsState(
         targetValue = if (isStartupRevealed || isReducedMotion) 1f else 0.985f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = motionTween(MotionDurations.Medium, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion),
         label = "startupScale"
     )
 
     val startupTranslationY by animateFloatAsState(
         targetValue = if (isStartupRevealed || isReducedMotion) 0f else 6f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = motionTween(MotionDurations.Medium, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion),
         label = "startupTranslationY"
     )
 
@@ -300,7 +289,6 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .blur(contentBlur)
         ) {
             AnimatedContent(
                 targetState = isFrontPage,
@@ -331,8 +319,10 @@ fun BrowserScreen(
                         val errorMessage = activeTab?.errorMessage
                         AnimatedVisibility(
                             visible = errorMessage != null,
-                            enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(200)),
-                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(150))
+                            enter = expandVertically(animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion)) +
+                                fadeIn(animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+                            exit = shrinkVertically(animationSpec = motionTween(MotionDurations.Micro, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = isReducedMotion)) +
+                                fadeOut(animationSpec = motionTween(MotionDurations.Micro, isReducedMotion = isReducedMotion))
                         ) {
                             if (errorMessage != null) {
                                 ErrorBanner(
@@ -350,6 +340,7 @@ fun BrowserScreen(
                                     BrowserWebView(
                                         viewModel = viewModel,
                                         targetUrl = tab.url,
+                                        tabId = tab.id,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .testTag("browser_webview"),
@@ -364,8 +355,8 @@ fun BrowserScreen(
                                 // Web page loading skeleton overlay representing the actual progress from WebView engine
                                 androidx.compose.animation.AnimatedVisibility(
                                     visible = tab.isLoading && tab.progress < 70 && tab.url.isNotBlank() && tab.url != BrowserViewModel.NOVA_HOME_URL,
-                                    enter = fadeIn(tween(140)),
-                                    exit = fadeOut(tween(220))
+                                    enter = fadeIn(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
+                                    exit = fadeOut(motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion))
                                 ) {
                                     WebPageLoadingSkeleton(
                                         progress = tab.progress,
@@ -552,9 +543,12 @@ fun BrowserScreen(
         visible = uiState.showPrivacySheet,
         pageUrl = activeTab?.url,
         isAdBlockerActive = uiState.isAdBlockerEnabled,
-        blockedAdsOnPage = uiState.activeTabBlockedAds,
+        blockedAdsOnPage = activeTab?.blockedAdsCount ?: 0,
+        blockedTrackersOnPage = activeTab?.blockedTrackersCount ?: 0,
         totalBlockedAds = uiState.totalBlockedAds,
+        blockCookies = uiState.blockCookies,
         onToggleAdBlocker = viewModel::toggleAdBlocker,
+        onToggleBlockCookies = viewModel::setBlockCookies,
         onClearCache = viewModel::clearBrowserCache,
         onDismiss = viewModel::closePrivacySheet
     )

@@ -101,6 +101,7 @@ fun MyApplicationTheme(
     cornerRadiusDp: Int = 12,
     panelTransparency: Float = 0.88f,
     animationIntensity: AnimationIntensity = AnimationIntensity.BALANCED,
+    lowEndMode: Boolean = false,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -135,13 +136,14 @@ fun MyApplicationTheme(
     )
 
     val systemReducedMotion = rememberReducedMotion()
-    val isReducedMotion = systemReducedMotion || (animationIntensity == AnimationIntensity.REDUCED)
+    val isReducedMotion = systemReducedMotion || (animationIntensity == AnimationIntensity.REDUCED) || lowEndMode
+    val effectiveTransparency = if (lowEndMode) 0.98f else panelTransparency
 
     CompositionLocalProvider(
         LocalBrowserCustomTheme provides effectiveTheme,
         LocalBrowserUiDensity provides uiDensity,
         LocalBrowserCornerRadius provides cornerRadiusDp.dp,
-        LocalBrowserPanelTransparency provides panelTransparency,
+        LocalBrowserPanelTransparency provides effectiveTransparency,
         LocalReducedMotion provides isReducedMotion,
         LocalMotionScheme provides MotionScheme.Default
     ) {

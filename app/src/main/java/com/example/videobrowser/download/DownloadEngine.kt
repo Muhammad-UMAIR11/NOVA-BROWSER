@@ -23,12 +23,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.PortUnreachableException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLException
 
 /**
  * Resilient, high-performance Download Engine with complete Pause, Cancel,
@@ -37,6 +49,8 @@ import java.util.concurrent.TimeUnit
  * Core Guarantee:
  * When a download is paused or interrupted (network loss, timeout, app backgrounding),
  * it starts directly from where it was paused without re-downloading existing bytes.
+ * When the internet drops, partial downloads are preserved and automatically resumed
+ * from the exact saved offset once network connectivity is restored.
  */
 class DownloadEngine(
     private val context: Context,
@@ -59,6 +73,106 @@ class DownloadEngine(
 
     private val downloadManager: DownloadManager? by lazy {
         context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+    }
+
+    private val connectivityManager: ConnectivityManager? by lazy {
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    }
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            Log.d(TAG, "Network connection restored -> triggering auto-resume check")
+            scope.launch {
+                delay(600) // Brief delay for socket/DNS routing to stabilize
+                resumeInterruptedDownloads()
+            }
+        }
+
+        override fun onLost(network: Network) {
+            Log.d(TAG, "Network connection lost")
+        }
+    }
+
+    init {
+        try {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager?.registerNetworkCallback(request, networkCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not register network callback: ${e.message}")
+        }
+
+        // Background watcher fallback: triggers auto-resume if waiting tasks exist and internet is back
+        scope.launch {
+            while (isActive) {
+                delay(4000)
+                try {
+                    val hasWaitingTasks = _tasks.value.any { it.isWaitingForNetwork }
+                    if (hasWaitingTasks && isNetworkAvailable()) {
+                        resumeInterruptedDownloads()
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    fun isNetworkAvailable(): Boolean {
+        return try {
+            val cm = connectivityManager ?: return true
+            val activeNetwork = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    fun isNetworkException(e: Throwable): Boolean {
+        var cause: Throwable? = e
+        while (cause != null) {
+            val msg = cause.message?.lowercase(Locale.ROOT) ?: ""
+            if (cause is SocketException ||
+                cause is SocketTimeoutException ||
+                cause is UnknownHostException ||
+                cause is ConnectException ||
+                cause is NoRouteToHostException ||
+                cause is PortUnreachableException ||
+                cause is SSLException ||
+                (cause is IOException && (
+                    msg.contains("network") ||
+                    msg.contains("connection") ||
+                    msg.contains("timeout") ||
+                    msg.contains("broken pipe") ||
+                    msg.contains("reset by peer") ||
+                    msg.contains("stream closed") ||
+                    msg.contains("unexpected end of stream") ||
+                    msg.contains("route to host") ||
+                    msg.contains("econnreset") ||
+                    msg.contains("enetunreach") ||
+                    msg.contains("enotconn")
+                ))
+            ) {
+                return true
+            }
+            cause = cause.cause
+        }
+        return false
+    }
+
+    /**
+     * Auto-resumes any downloads that were interrupted specifically due to network loss.
+     */
+    fun resumeInterruptedDownloads() {
+        val waitingTasks = _tasks.value.filter {
+            it.isWaitingForNetwork && (it.status == DownloadStatus.PAUSED || it.status == DownloadStatus.FAILED)
+        }
+        if (waitingTasks.isNotEmpty()) {
+            Log.i(TAG, "Auto-resuming ${waitingTasks.size} tasks that were waiting for network")
+            waitingTasks.forEach { task ->
+                resumeDownload(task.id)
+            }
+        }
     }
 
     /**
@@ -423,9 +537,12 @@ class DownloadEngine(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Download interrupted: ${e.message}", e)
+            val isNet = isNetworkException(e) || !isNetworkAvailable()
+            Log.e(TAG, "Download interrupted (isNet=$isNet): ${e.message}", e)
             val currentLen = if (destFile.exists()) destFile.length() else task.downloadedBytes
-            // Interruption preservation: Preserve file and mark as PAUSED so user can resume where it paused!
+            val offsetMb = (currentLen / 1024.0 / 1024.0).let { String.format(Locale.US, "%.1f MB", it) }
+
+            // Interruption preservation: Keep partial file intact and mark as PAUSED with auto-resume info!
             _tasks.update { current ->
                 current.map {
                     if (it.id == task.id) it.copy(
@@ -433,7 +550,12 @@ class DownloadEngine(
                         downloadedBytes = currentLen,
                         progress = if (it.totalBytes > 0) (currentLen.toFloat() / it.totalBytes.toFloat()).coerceIn(0f, 1f) else it.progress,
                         speedFormatted = "",
-                        errorMessage = "Interrupted (${e.localizedMessage ?: "Connection dropped"}). Tap Resume to continue."
+                        isWaitingForNetwork = isNet,
+                        errorMessage = if (isNet) {
+                            "Offline: Saved at $offsetMb. Auto-resumes when online."
+                        } else {
+                            "Interrupted (${e.localizedMessage ?: "Connection dropped"}). Tap Resume to continue."
+                        }
                     ) else it
                 }
             }
@@ -666,7 +788,8 @@ class DownloadEngine(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "HLS download interrupted: ${e.message}", e)
+            val isNet = isNetworkException(e) || !isNetworkAvailable()
+            Log.e(TAG, "HLS download interrupted (isNet=$isNet): ${e.message}", e)
             val currentLen = if (destFile.exists()) destFile.length() else task.downloadedBytes
             _tasks.update { current ->
                 current.map {
@@ -674,7 +797,12 @@ class DownloadEngine(
                         status = DownloadStatus.PAUSED, // Interruption pauses gracefully so it continues from segment offset!
                         downloadedBytes = currentLen,
                         speedFormatted = "",
-                        errorMessage = "Interrupted at segment ${it.downloadedSegments}/${it.totalSegments}. Tap Resume to continue."
+                        isWaitingForNetwork = isNet,
+                        errorMessage = if (isNet) {
+                            "Offline: Saved at segment ${it.downloadedSegments}/${it.totalSegments}. Auto-resumes when online."
+                        } else {
+                            "Interrupted at segment ${it.downloadedSegments}/${it.totalSegments}. Tap Resume to continue."
+                        }
                     ) else it
                 }
             }
@@ -706,7 +834,8 @@ class DownloadEngine(
                         status = DownloadStatus.PAUSED,
                         downloadedBytes = fileLen,
                         progress = if (it.totalBytes > 0) (fileLen.toFloat() / it.totalBytes.toFloat()).coerceIn(0f, 1f) else it.progress,
-                        speedFormatted = ""
+                        speedFormatted = "",
+                        isWaitingForNetwork = false
                     )
                 } else it
             }
@@ -734,6 +863,7 @@ class DownloadEngine(
                 if (it.id == taskId) it.copy(
                     status = DownloadStatus.DOWNLOADING,
                     downloadedBytes = existingBytes,
+                    isWaitingForNetwork = false,
                     errorMessage = null,
                     speedFormatted = "Resuming..."
                 ) else it
@@ -791,6 +921,7 @@ class DownloadEngine(
                     it.copy(
                         status = DownloadStatus.CANCELLED,
                         speedFormatted = "",
+                        isWaitingForNetwork = false,
                         errorMessage = "Download cancelled"
                     )
                 } else it
@@ -819,6 +950,7 @@ class DownloadEngine(
                     status = DownloadStatus.DOWNLOADING,
                     downloadedBytes = existingBytes,
                     progress = if (it.totalBytes > 0) (existingBytes.toFloat() / it.totalBytes.toFloat()).coerceIn(0f, 1f) else 0f,
+                    isWaitingForNetwork = false,
                     errorMessage = null,
                     speedFormatted = if (existingBytes > 0L) "Resuming..." else ""
                 ) else it

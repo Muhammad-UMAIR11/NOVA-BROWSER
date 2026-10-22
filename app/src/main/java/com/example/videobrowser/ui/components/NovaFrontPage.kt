@@ -11,6 +11,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import com.example.videobrowser.ui.motion.LocalReducedMotion
+import com.example.videobrowser.ui.motion.MotionDurations
+import com.example.videobrowser.ui.motion.MotionTransitions
+import com.example.videobrowser.ui.motion.iosPressEffect
+import com.example.videobrowser.ui.motion.motionTween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -86,6 +91,7 @@ fun NovaFrontPage(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isReducedMotion = LocalReducedMotion.current
     var searchInput by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
 
@@ -212,8 +218,8 @@ fun NovaFrontPage(
                         // Clear button
                         AnimatedVisibility(
                             visible = searchInput.isNotEmpty(),
-                            enter = fadeIn(tween(140)) + scaleIn(tween(140)),
-                            exit = fadeOut(tween(120)) + scaleOut(tween(120))
+                            enter = MotionTransitions.scaleFadeIn(isReducedMotion, durationMillis = MotionDurations.Fast),
+                            exit = MotionTransitions.scaleFadeOut(isReducedMotion, durationMillis = MotionDurations.Micro)
                         ) {
                             IconButton(
                                 onClick = { searchInput = "" },
@@ -269,6 +275,7 @@ fun NovaFrontPage(
                             Color(0xFF475569).copy(alpha = 0.6f),
                             CircleShape
                         )
+                        .iosPressEffect(pressedScale = 0.90f, isReducedMotion = isReducedMotion)
                         .clickable { onOpenSettings() }
                         .testTag("nova_moon_settings_button"),
                     shape = CircleShape,
@@ -368,16 +375,23 @@ fun NovaFrontPage(
 fun GlowingMoonOrb(
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "moonGlowTransition")
-    val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.16f,
-        targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowPulse"
-    )
+    val isReducedMotion = LocalReducedMotion.current
+    val glowPulse: Float
+    if (isReducedMotion) {
+        glowPulse = 0.20f
+    } else {
+        val infiniteTransition = rememberInfiniteTransition(label = "moonGlowTransition")
+        val animatedPulse by infiniteTransition.animateFloat(
+            initialValue = 0.16f,
+            targetValue = 0.25f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(3000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "glowPulse"
+        )
+        glowPulse = animatedPulse
+    }
 
     Canvas(modifier = modifier) {
         val w = size.width

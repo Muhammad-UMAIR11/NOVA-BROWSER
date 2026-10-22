@@ -71,6 +71,7 @@ private const val TAG = "BrowserWebView"
 fun BrowserWebView(
     viewModel: BrowserViewModel,
     targetUrl: String,
+    tabId: String = "",
     modifier: Modifier = Modifier,
     onFullscreenStateChange: (Boolean, View?, (() -> Unit)?) -> Unit = { _, _, _ -> }
 ) {
@@ -226,15 +227,14 @@ fun BrowserWebView(
                 modifier = modifier.pageMotionLayer(pageMotionState),
                 factory = { ctx ->
                     try {
-                        WebViewCacheManager.sanitizeWebViewCache(ctx)
                         createConfiguredWebView(
                             context = ctx,
                             viewModel = viewModel,
                             currentUrl = targetUrl,
+                            tabId = tabId,
                             fallbackSoftwareLayer = (rendererCrashCount > 0),
                             onRenderProcessExited = {
-                                WebViewCacheManager.sanitizeWebViewCache(ctx)
-                                if (rendererCrashCount < 2) {
+                                if (rendererCrashCount < 4) {
                                     rendererCrashCount++
                                 } else {
                                     webViewCreationError = "Web rendering engine stopped unexpectedly. Tap below to reload."
@@ -267,6 +267,17 @@ fun BrowserWebView(
                 update = { wv ->
                     if (wv is WebView) {
                         val state = viewModel.uiState.value
+                        val isLowEndMode = state.lowEndMode
+                        val shouldForceSoftware = (rendererCrashCount > 0) || !state.hardwareAccel || isLowEndMode || isHardwareRenderNodeUnavailable()
+                        if (shouldForceSoftware && wv.layerType != View.LAYER_TYPE_SOFTWARE) {
+                            wv.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                        } else if (!shouldForceSoftware && wv.layerType != View.LAYER_TYPE_HARDWARE) {
+                            wv.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                        }
+                        wv.settings.offscreenPreRaster = !isLowEndMode
+                        wv.settings.mediaPlaybackRequiresUserGesture = isLowEndMode
+                        val cookieManager = android.webkit.CookieManager.getInstance()
+                        cookieManager.setAcceptThirdPartyCookies(wv, !state.blockCookies)
                         if (state.applyTextZoomToWeb) {
                             val zoomPercent = (state.fontScale * 100).toInt().coerceIn(75, 175)
                             if (wv.settings.textZoom != zoomPercent) {
@@ -296,22 +307,38 @@ private fun createConfiguredWebView(
     context: Context,
     viewModel: BrowserViewModel,
     currentUrl: String,
+    tabId: String,
     fallbackSoftwareLayer: Boolean,
     onRenderProcessExited: () -> Unit,
     onPageStartedAnimation: () -> Unit = {},
     onFullscreenStateChange: (Boolean, View?, (() -> Unit)?) -> Unit
 ): WebView {
     WebViewCacheManager.configureGraphicsEnvironment()
-    WebViewCacheManager.sanitizeWebViewCache(context)
+    val cookieManager = android.webkit.CookieManager.getInstance()
+    cookieManager.setAcceptCookie(true)
     return WebView(context).apply {
+        cookieManager.setAcceptThirdPartyCookies(this, !viewModel.uiState.value.blockCookies)
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
 
-        // If the graphics hardware driver (e.g. MESA rendernode) is unavailable in this environment
-        // or a render process exit occurred, gracefully fall back to software rendering layer
-        if (fallbackSoftwareLayer || isHardwareRenderNodeUnavailable()) {
+        val isLowEnd = viewModel.uiState.value.lowEndMode
+        // Set stable renderer priority bound to hosting process with idle release
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val priority = if (isLowEnd) WebView.RENDERER_PRIORITY_WAIVED else WebView.RENDERER_PRIORITY_BOUND
+                setRendererPriorityPolicy(priority, true)
+            } catch (_: Exception) {}
+        }
+
+        // If the graphics hardware driver (e.g. MESA rendernode) is unavailable in this environment,
+        // or performance mode (low-end device mode) is active, gracefully fall back to software rendering layer
+        val forceSoftwareLayer = fallbackSoftwareLayer ||
+            !viewModel.uiState.value.hardwareAccel ||
+            isLowEnd ||
+            isHardwareRenderNodeUnavailable()
+        if (forceSoftwareLayer) {
             setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         }
 
@@ -325,7 +352,10 @@ private fun createConfiguredWebView(
             setSupportZoom(true)
             allowContentAccess = true
             allowFileAccess = false
-            mediaPlaybackRequiresUserGesture = false
+            // On low-end hardware, avoid aggressive video decoding until user explicitly interacts
+            mediaPlaybackRequiresUserGesture = isLowEnd
+            // Conserve RAM and GPU memory on low-end devices by avoiding pre-rendering hidden offscreen tiles
+            offscreenPreRaster = !isLowEnd
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             cacheMode = WebSettings.LOAD_DEFAULT
 
@@ -357,6 +387,8 @@ private fun createConfiguredWebView(
         }
 
         webViewClient = object : WebViewClient() {
+            private var isViewDestroyed = false
+
             override fun onRenderProcessGone(
                 view: WebView,
                 detail: RenderProcessGoneDetail
@@ -367,10 +399,13 @@ private fun createConfiguredWebView(
                     true
                 }
                 Log.w(TAG, "WebView render process exited: didCrash=$didCrash")
-                try {
-                    (view.parent as? ViewGroup)?.removeView(view)
-                    view.destroy()
-                } catch (_: Exception) {}
+                if (!isViewDestroyed) {
+                    isViewDestroyed = true
+                    try {
+                        (view.parent as? ViewGroup)?.removeView(view)
+                        view.destroy()
+                    } catch (_: Exception) {}
+                }
                 onRenderProcessExited()
                 // Return true to indicate the host application safely handled the termination,
                 // preventing Android from killing the entire app process.
@@ -387,9 +422,16 @@ private fun createConfiguredWebView(
                     val pageUrl = headers["Referer"] ?: currentUrl
 
                     // 1. Primary Feature: Always-on Ad & Tracker Blocker across every site
-                    if (viewModel.isAdBlockerActive() && AdBlockerEngine.isAdOrTracker(request.url)) {
-                        viewModel.onAdBlocked(request.url?.host ?: "")
-                        return AdBlockerEngine.createEmptyResponse()
+                    if (viewModel.isAdBlockerActive()) {
+                        val blockType = AdBlockerEngine.classifyRequest(request.url, isForMainFrame = request.isForMainFrame)
+                        if (blockType != AdBlockerEngine.BlockType.NONE) {
+                            val host = request.url?.host ?: ""
+                            val path = request.url?.path ?: ""
+                            val resourceKey = "$host$path"
+                            val targetTabId = tabId.ifBlank { viewModel.uiState.value.activeTabId }
+                            viewModel.onResourceBlocked(tabId = targetTabId, resourceKey = resourceKey, blockType = blockType)
+                            return AdBlockerEngine.createBlockedResponse(reqUrl)
+                        }
                     }
 
                     // 2. Video & Media Network Sniffer
@@ -422,6 +464,9 @@ private fun createConfiguredWebView(
                 super.onPageFinished(view, url)
                 viewModel.onPageFinished(url, view.title)
                 viewModel.onNavigationStateChanged(view.canGoBack(), view.canGoForward())
+                try {
+                    android.webkit.CookieManager.getInstance().flush()
+                } catch (_: Exception) {}
 
                 // Sweep remaining ad elements
                 if (viewModel.isAdBlockerActive()) {
@@ -456,8 +501,11 @@ private fun createConfiguredWebView(
                 request: WebResourceRequest
             ): Boolean {
                 // Prevent ad popunder / market schemes
-                if (viewModel.isAdBlockerActive() && AdBlockerEngine.shouldBlockNavigation(request.url)) {
-                    viewModel.onAdBlocked(request.url?.host ?: "")
+                val isStrict = viewModel.uiState.value.strictPopups
+                if (viewModel.isAdBlockerActive() && AdBlockerEngine.shouldBlockNavigation(request.url, isStrictPopups = isStrict)) {
+                    val targetTabId = tabId.ifBlank { viewModel.uiState.value.activeTabId }
+                    val host = request.url?.host ?: ""
+                    viewModel.onResourceBlocked(tabId = targetTabId, resourceKey = host, blockType = AdBlockerEngine.BlockType.AD)
                     return true
                 }
 
@@ -535,26 +583,12 @@ private fun createConfiguredWebView(
  * In such environments, falling back to a software layer prevents Mesa from failing to open rendernodes.
  */
 private fun isHardwareRenderNodeUnavailable(): Boolean {
-    val isEmulator = isEmulatorEnvironment()
-    return try {
-        val renderNode = java.io.File("/dev/dri/renderD128")
-        if (renderNode.exists()) {
-            false
-        } else {
-            val driDir = java.io.File("/dev/dri")
-            val hasRenderNode = driDir.exists() && driDir.listFiles()?.any { it.name.startsWith("renderD") } == true
-            if (!hasRenderNode) {
-                // No DRI render node present
-                true
-            } else {
-                false
-            }
-        }
-    } catch (_: Exception) {
-        // In sandboxed environments where SELinux restricts /dev/dri access,
-        // assume render node is unavailable if running in an emulator
-        isEmulator
+    val driMissing = try {
+        !java.io.File("/dev/dri/renderD128").exists() && !java.io.File("/dev/dri").exists()
+    } catch (_: Throwable) {
+        true
     }
+    return driMissing || isEmulatorEnvironment()
 }
 
 private fun isEmulatorEnvironment(): Boolean {

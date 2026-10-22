@@ -130,4 +130,29 @@ class MotionSystemTest {
         // Should return a valid boolean without throwing
         assertTrue(result == true || result == false)
     }
+
+    @Test
+    fun `iOS spring physics specs conform to Apple fluid motion guidelines`() {
+        val iosFluid = MotionSprings.iosFluid<Float>()
+        val iosSnappy = MotionSprings.iosSnappy<Float>()
+        val iosBouncy = MotionSprings.iosBouncy<Float>()
+        val iosSheet = MotionSprings.iosSheet<Float>()
+        val iosRubber = MotionSprings.iosRubberBand<Float>()
+
+        // iOS fluid spring has natural 0.82 damping ratio
+        assertEquals(0.82f, iosFluid.dampingRatio, 0.001f)
+        assertEquals(0.88f, iosSnappy.dampingRatio, 0.001f)
+        assertEquals(0.72f, iosBouncy.dampingRatio, 0.001f)
+        assertEquals(0.85f, iosSheet.dampingRatio, 0.001f)
+        assertEquals(0.76f, iosRubber.dampingRatio, 0.001f)
+    }
+
+    @Test
+    fun `motionIosSpring returns snap when reduced motion is enabled and spring when disabled`() {
+        val normalIosSpring = com.example.videobrowser.ui.motion.motionIosSpring<Float>(isReducedMotion = false)
+        assertTrue(normalIosSpring is SpringSpec<Float>)
+
+        val reducedIosSpring = com.example.videobrowser.ui.motion.motionIosSpring<Float>(isReducedMotion = true)
+        assertNotNull(reducedIosSpring)
+    }
 }

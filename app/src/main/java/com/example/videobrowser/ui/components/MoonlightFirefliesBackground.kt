@@ -1,6 +1,7 @@
 package com.example.videobrowser.ui.components
 
 import androidx.compose.animation.core.LinearEasing
+import com.example.videobrowser.ui.motion.LocalReducedMotion
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -82,6 +83,15 @@ private fun createCachedGlowBitmap(size: Int): ImageBitmap {
 fun MoonlightFirefliesBackground(
     modifier: Modifier = Modifier
 ) {
+    val isReducedMotion = LocalReducedMotion.current
+    if (isReducedMotion) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(0xFF000000))
+        )
+        return
+    }
     // Generate deterministic fireflies with integer cycle counts over the 120s loop duration
     // so the start and end of the loop match seamlessly with zero jump.
     val fireflies = remember {

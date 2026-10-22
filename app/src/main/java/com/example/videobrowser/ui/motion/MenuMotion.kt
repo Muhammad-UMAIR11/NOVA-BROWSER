@@ -62,7 +62,7 @@ object MenuMotionSpecs {
         }
         val slideOffsetFactor = if (fromBottom) 0.25f else -0.12f
         return fadeIn(
-            animationSpec = motionTween(durationMillis, easing = MotionEasing.Standard, isReducedMotion = false)
+            animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = false)
         ) + slideInVertically(
             initialOffsetY = { (it * slideOffsetFactor).toInt() },
             animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = false)
@@ -75,14 +75,14 @@ object MenuMotionSpecs {
     fun menuExit(
         isReducedMotion: Boolean,
         toBottom: Boolean = false,
-        durationMillis: Int = MotionDurations.Micro
+        durationMillis: Int = MotionDurations.Fast
     ): ExitTransition {
         if (isReducedMotion) {
             return fadeOut(animationSpec = motionTween(0, isReducedMotion = true))
         }
         val slideOffsetFactor = if (toBottom) 0.25f else -0.12f
         return fadeOut(
-            animationSpec = motionTween(durationMillis, easing = MotionEasing.Standard, isReducedMotion = false)
+            animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = false)
         ) + slideOutVertically(
             targetOffsetY = { (it * slideOffsetFactor).toInt() },
             animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = false)
@@ -100,7 +100,7 @@ object MenuMotionSpecs {
             return fadeIn(animationSpec = motionTween(0, isReducedMotion = true))
         }
         return fadeIn(
-            animationSpec = motionTween(durationMillis, easing = MotionEasing.Standard, isReducedMotion = false)
+            animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = false)
         ) + slideInVertically(
             initialOffsetY = { -((it * 0.14f).toInt()) },
             animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = false)
@@ -112,13 +112,13 @@ object MenuMotionSpecs {
 
     fun dropdownExit(
         isReducedMotion: Boolean,
-        durationMillis: Int = MotionDurations.Micro
+        durationMillis: Int = MotionDurations.Fast
     ): ExitTransition {
         if (isReducedMotion) {
             return fadeOut(animationSpec = motionTween(0, isReducedMotion = true))
         }
         return fadeOut(
-            animationSpec = motionTween(durationMillis, easing = MotionEasing.Standard, isReducedMotion = false)
+            animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = false)
         ) + slideOutVertically(
             targetOffsetY = { -((it * 0.14f).toInt()) },
             animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = false)
@@ -136,7 +136,7 @@ object MenuMotionSpecs {
             return fadeIn(animationSpec = motionTween(0, isReducedMotion = true))
         }
         return fadeIn(
-            animationSpec = motionTween(durationMillis, easing = MotionEasing.Standard, isReducedMotion = false)
+            animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = false)
         ) + slideInVertically(
             initialOffsetY = { (it * 0.08f).toInt() },
             animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = false)
@@ -148,13 +148,13 @@ object MenuMotionSpecs {
 
     fun dialogExit(
         isReducedMotion: Boolean,
-        durationMillis: Int = MotionDurations.Micro
+        durationMillis: Int = MotionDurations.Fast
     ): ExitTransition {
         if (isReducedMotion) {
             return fadeOut(animationSpec = motionTween(0, isReducedMotion = true))
         }
         return fadeOut(
-            animationSpec = motionTween(durationMillis, easing = MotionEasing.Standard, isReducedMotion = false)
+            animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = false)
         ) + slideOutVertically(
             targetOffsetY = { (it * 0.08f).toInt() },
             animationSpec = motionTween(durationMillis, easing = MotionEasing.EmphasizedAccelerate, isReducedMotion = false)

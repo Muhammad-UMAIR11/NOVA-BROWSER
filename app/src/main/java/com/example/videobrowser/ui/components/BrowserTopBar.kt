@@ -69,6 +69,8 @@ import com.example.videobrowser.ui.motion.LocalReducedMotion
 import com.example.videobrowser.ui.motion.MotionDurations
 import com.example.videobrowser.ui.motion.MotionEasing
 import com.example.videobrowser.ui.motion.MotionTransitions
+import com.example.videobrowser.ui.motion.iosPressEffect
+import com.example.videobrowser.ui.motion.motionIosSpring
 import com.example.videobrowser.ui.motion.motionTween
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -128,10 +130,10 @@ fun BrowserTopBar(
         label = "containerBorderColor"
     )
 
-    // Subtle scale and border width transitions on focus / blur
+    // Subtle scale and border width transitions on focus / blur with iOS spring physics
     val barScale by animateFloatAsState(
-        targetValue = if (isFocused && !isReducedMotion) 1.01f else 1.0f,
-        animationSpec = motionTween(MotionDurations.Fast, easing = MotionEasing.EmphasizedDecelerate, isReducedMotion = isReducedMotion),
+        targetValue = if (isFocused && !isReducedMotion) 1.015f else 1.0f,
+        animationSpec = motionIosSpring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow, isReducedMotion = isReducedMotion),
         label = "barScale"
     )
 
@@ -171,7 +173,7 @@ fun BrowserTopBar(
     // Smooth linear progress indicator animation
     val animatedProgress by animateFloatAsState(
         targetValue = if (isLoading) (progress.coerceIn(8, 100) / 100f) else 1f,
-        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        animationSpec = motionTween(MotionDurations.Medium, easing = MotionEasing.Standard, isReducedMotion = isReducedMotion),
         label = "loadingProgress"
     )
 
@@ -216,6 +218,7 @@ fun BrowserTopBar(
                             ),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
+                                .iosPressEffect(pressedScale = 0.94f, isReducedMotion = isReducedMotion)
                                 .clickable { onShieldClick() }
                                 .testTag("top_bar_shield_badge")
                         ) {
@@ -395,6 +398,7 @@ fun BrowserTopBar(
                 onClick = onOpenDownloads,
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("open_downloads_button")
             ) {
                 BadgedBox(
@@ -419,6 +423,7 @@ fun BrowserTopBar(
                 onClick = onOpenTabs,
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("open_tabs_button")
             ) {
                 BadgedBox(
@@ -441,6 +446,7 @@ fun BrowserTopBar(
                 onClick = onOpenSettings,
                 modifier = Modifier
                     .size(44.dp)
+                    .iosPressEffect(pressedScale = 0.88f, isReducedMotion = isReducedMotion)
                     .testTag("open_settings_button")
             ) {
                 Icon(
@@ -451,22 +457,24 @@ fun BrowserTopBar(
             }
         }
 
-        // Fluid Animated Loading Progress Bar
-        AnimatedVisibility(
-            visible = isLoading,
-            enter = MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast) +
-                expandVertically(animationSpec = motionTween(MotionDurations.Fast, isReducedMotion = isReducedMotion)),
-            exit = MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Medium) +
-                shrinkVertically(animationSpec = motionTween(MotionDurations.Medium, isReducedMotion = isReducedMotion))
+        // Fluid Animated Loading Progress Bar with stable height (prevents page jump when loading finishes)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.5.dp)
         ) {
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.5.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isLoading,
+                enter = MotionTransitions.fadeIn(isReducedMotion, durationMillis = MotionDurations.Fast),
+                exit = MotionTransitions.fadeOut(isReducedMotion, durationMillis = MotionDurations.Fast)
+            ) {
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
+            }
         }
     }
 }

@@ -9,6 +9,52 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+
+/**
+ * iOS-optimized fluid tactile press effect.
+ * Uses GPU [graphicsLayer] on the RenderNode without triggering relayout or measure passes,
+ * ensuring steady 60/120 FPS buttery smoothness without frame drops or lag.
+ *
+ * Implements iOS touch physics:
+ * - Instant responsive depression on touch-down (StiffnessHigh)
+ * - Elastic, organic spring rebound on release (dampingRatio = 0.78f, StiffnessMediumLow)
+ *
+ * Automatically respects [isReducedMotion].
+ */
+fun Modifier.iosPressEffect(
+    pressedScale: Float = 0.96f,
+    interactionSource: MutableInteractionSource? = null,
+    isReducedMotion: Boolean = false
+): Modifier = composed {
+    if (isReducedMotion) return@composed this
+
+    val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isPressed by source.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) pressedScale else 1.0f,
+        animationSpec = if (isPressed) {
+            spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessHigh
+            )
+        } else {
+            spring(
+                dampingRatio = 0.78f,
+                stiffness = Spring.StiffnessMediumLow
+            )
+        },
+        label = "iosPressScale"
+    )
+
+    this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
 /**
  * Lightweight, GPU-accelerated touch feedback modifier using [graphicsLayer].
  * Modifies scale directly on the RenderNode without triggering relayout or remeasure passes,
@@ -20,27 +66,11 @@ fun Modifier.motionPressEffect(
     pressedScale: Float = 0.97f,
     interactionSource: MutableInteractionSource? = null,
     isReducedMotion: Boolean = false
-): Modifier = composed {
-    if (isReducedMotion) return@composed this
-
-    val source = interactionSource ?: remember { MutableInteractionSource() }
-    val isPressed by source.collectIsPressedAsState()
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) pressedScale else 1.0f,
-        animationSpec = motionTween(
-            durationMillis = if (isPressed) MotionDurations.Micro else MotionDurations.Fast,
-            easing = if (isPressed) MotionEasing.EmphasizedAccelerate else MotionEasing.EmphasizedDecelerate,
-            isReducedMotion = false
-        ),
-        label = "motionPressScale"
-    )
-
-    this.graphicsLayer {
-        scaleX = scale
-        scaleY = scale
-    }
-}
+): Modifier = iosPressEffect(
+    pressedScale = pressedScale,
+    interactionSource = interactionSource,
+    isReducedMotion = isReducedMotion
+)
 
 /**
  * GPU-accelerated smooth alpha transition.
